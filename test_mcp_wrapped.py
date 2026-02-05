@@ -1,12 +1,12 @@
 import asyncio
 from pathlib import Path
 
-from dotenv import load_dotenv
 import logfire
+from dotenv import load_dotenv
 from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPServerStdio
 
-from skill_loader import discover_skills, load_skill_instructions, build_skills_prompt
+from skill_loader import build_skills_prompt, discover_skills, load_skill_instructions
 
 load_dotenv()
 
@@ -20,7 +20,11 @@ skills_prompt = build_skills_prompt(skills)
 
 mcp_server = MCPServerStdio(
     "npx",
-    args=["-y", "@modelcontextprotocol/server-filesystem", "/Users/stevenromero/Development/Learning/life-engine-learning"],
+    args=[
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/stevenromero/Development/Learning/life-engine-learning",
+    ],
 )
 
 agent = Agent(
@@ -48,16 +52,15 @@ async def call_mcp_tool(server: str, tool_name: str, arguments: dict) -> str:
                 result = await mcp_server._client.call_tool(tool_name, arguments)
                 # Extract text content from result
                 if result.content:
-                    return '\n'.join(
-                        item.text for item in result.content
-                        if hasattr(item, 'text')
+                    return "\n".join(
+                        item.text for item in result.content if hasattr(item, "text")
                     )
                 return str(result)
-        return f'Tool {tool_name} not found'
+        return f"Tool {tool_name} not found"
 
 
 async def main():
-    result = await agent.run("List all files in this directory")
+    result = await agent.run("What is 15 multiplied by 7?")
     print(result.output)
 
 

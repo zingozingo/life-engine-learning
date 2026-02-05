@@ -39,8 +39,21 @@ def load_skill(skill_name: str) -> str:
 async def call_mcp_tool(server: str, tool_name: str, arguments: dict) -> str:
     """Call a tool on an MCP server."""
     async with mcp_server:
-        result = await mcp_server.call_tool(tool_name, arguments)
-    return str(result)
+        # Get the tools list to find our tool
+        tools = await mcp_server.list_tools()
+        # Find the matching tool
+        for tool in tools:
+            if tool.name == tool_name:
+                # Use the low-level client session to call the tool
+                result = await mcp_server._client.call_tool(tool_name, arguments)
+                # Extract text content from result
+                if result.content:
+                    return '\n'.join(
+                        item.text for item in result.content
+                        if hasattr(item, 'text')
+                    )
+                return str(result)
+        return f'Tool {tool_name} not found'
 
 
 async def main():

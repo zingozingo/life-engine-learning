@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Travel Concierge — Agent Architecture Explorer</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <h1>🧳 Travel Concierge</h1>
+            <span class="subtitle">Agent Architecture Explorer</span>
+        </header>
+
+        <!-- Main Layout -->
+        <div class="main-layout">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <div class="sidebar-header">
+                    <h2>Sessions</h2>
+                    <button id="refresh-btn" class="btn-icon" title="Refresh sessions">↻</button>
+                </div>
+
+                <div class="filter-section">
+                    <label for="level-filter">Filter by Level:</label>
+                    <select id="level-filter">
+                        <option value="all">All Levels</option>
+                        <option value="1">Level 1: Monolith</option>
+                        <option value="2">Level 2: Skills</option>
+                        <option value="3">Level 3: Classifier</option>
+                        <option value="4">Level 4: Adaptive</option>
+                        <option value="5">Level 5: MCP</option>
+                    </select>
+                </div>
+
+                <div id="session-list" class="session-list">
+                    <div class="loading">Loading sessions...</div>
+                </div>
+            </aside>
+
+            <!-- Main Content -->
+            <main class="content">
+                <div id="empty-state" class="empty-state">
+                    <div class="empty-icon">📋</div>
+                    <h3>Select a Session</h3>
+                    <p>Choose a session from the sidebar to view its event timeline with Four Questions annotations.</p>
+                </div>
+
+                <div id="timeline-container" class="timeline-container" style="display: none;">
+                    <div class="session-header">
+                        <div class="session-meta">
+                            <span id="session-level" class="level-badge">L1</span>
+                            <h2 id="session-query"></h2>
+                        </div>
+                        <div class="session-stats">
+                            <span class="stat"><strong id="session-tokens">0</strong> tokens</span>
+                            <span class="stat"><strong id="session-events">0</strong> events</span>
+                            <span class="stat" id="session-time"></span>
+                        </div>
+                    </div>
+
+                    <div class="legend">
+                        <span class="legend-item"><span class="dot code"></span> Code Decision</span>
+                        <span class="legend-item"><span class="dot llm"></span> LLM Decision</span>
+                        <span class="legend-item"><span class="dot human"></span> Human Decision</span>
+                    </div>
+
+                    <div id="timeline" class="timeline"></div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

@@ -63,8 +63,20 @@ life-engine-learning/
 └── decisions.md         # Architectural decisions log
 ```
 
+## Dashboard
+
+The dashboard visualizes agent execution with the **Four Questions** framework:
+- **Q1: Who Decides?** — Code, LLM, or human?
+- **Q2: What Does It See?** — Context available for the decision
+- **Q3: What Can Go Wrong?** — Blast radius assessment
+- **Q4: Where's the Human?** — Human-in-the-loop patterns
+
+Start with `make start` or `make dashboard`, then open http://localhost:8000.
+
+See [docs/FOUR_QUESTIONS.md](docs/FOUR_QUESTIONS.md) for the full framework.
+
 ## Observability
 
 - **Event logging**: Every query writes a session JSON to `logs/`
 - **Logfire**: Pydantic AI auto-instrumentation for tracing
-- **Dashboard**: Visual comparison of engine levels (WIP)
+- **Dashboard**: Event timeline with Four Questions annotations

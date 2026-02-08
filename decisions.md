@@ -52,3 +52,17 @@ Format: Date, decision title, and brief explanation of the choice and rationale.
 - `make stop` cleans up any running dashboard processes
 - FastAPI serves dashboard UI and session API endpoints
 - Session data accessed via EventLogger.load_all_sessions()
+
+---
+
+## 2025-02-08: Dashboard Design
+
+**Decision**: Four Questions framework (Who Decides, What Does It See, What Can Go Wrong, Where's the Human) as the annotation backbone for every event in the timeline.
+
+**Details**:
+- Dynamic annotation engine generates per-level explanations (viz/annotations.py)
+- No hardcoded frontend content — all annotations served via API
+- Color coding: blue = code decision, orange = LLM decision, green = human decision
+- Session timeline view with expandable event details
+- Vanilla HTML + CSS + JS, no frameworks — keeps it simple for a learning project
+- This scales automatically as new levels are added

@@ -26,3 +26,16 @@ Format: Date, decision title, and brief explanation of the choice and rationale.
 - Database skill was defined aspirationally but never implemented
 - Adding `status` field to frontmatter allows skill_loader to potentially filter in future
 - Active skills: filesystem (MCP), time (native tool), weather (http_request)
+
+---
+
+## 2025-02-07: Pivot to Travel Concierge Theme
+
+**Decision**: Restructured project around 5 engine levels (monolith → skills → classifier → adaptive → MCP) sharing common skills and tools.
+
+**Details**:
+- Custom event logging with FastAPI dashboard for visualization
+- Old chatbot code archived to archive/v1_original/
+- Goal: master implicit vs explicit routing and proactive vs reactive data fetching through visual comparison
+- New skills: weather, flights, hotels, activities, currency, visa, packing
+- See docs/SPEC.md for full architecture specification

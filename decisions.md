@@ -95,3 +95,51 @@ Format: Date, decision title, and brief explanation of the choice and rationale.
 - `make start` is a convenience: ensures dashboard running, then starts chat
 - This allows running multiple chat sessions while keeping dashboard open for continuous observation
 - Tool events now show specific tool names (http_fetch, mock_api_fetch) instead of generic titles
+
+---
+
+## 2026-02-08: Three Decision Makers Framework
+
+**Decision**: Expanded decision_by from code|llm to code|llm|human as the attribution model for all events.
+
+**Context**: During dashboard design, realized the human is a third decision maker (chooses query, selects level, approves actions in future). Two decision makers was incomplete.
+
+**Rationale**: Every event in the system should be attributable to one of exactly three entities. This maps to the Four Questions framework Q1 ("Who Decides?") and enables color-coded visualization (blue=code, orange=LLM, green=human).
+
+**Impact**: Affects shared/models.py DecisionBy enum, viz/annotations.py, dashboard color coding. All future engine levels must tag events with the correct decision maker.
+
+---
+
+## 2026-02-08: Two-Level Event Expansion UX
+
+**Decision**: Dashboard events expand in three tiers — Data first, Education second, Raw debug third.
+
+**Context**: Initial dashboard showed educational Four Questions content immediately on expand, drowning out the operational data (parameters, response text, tool results).
+
+**Rationale**: Users need to see WHAT happened before learning WHY. The educational content is still one click away but doesn't block visibility of actual event data.
+
+**Impact**: Sets the UX pattern for all future dashboard views. app.js renders collapsed → data panel → "Learn" toggle → "Raw Data" toggle.
+
+---
+
+## 2026-02-08: Generic Tools Pattern
+
+**Decision**: Tools are generic verbs (http_fetch, mock_api_fetch), skills provide specific nouns (URLs, parameters, when/why to use). Multiple skills share the same tools with different configurations.
+
+**Context**: Needed a tool architecture that works across all 5 levels without linear tool definition growth.
+
+**Rationale**: At Level 1, both tools are always registered. At Level 3, tools can be scoped per route. The tools themselves don't change — only which skills provide instructions for using them. This enables progressive disclosure without changing tool definitions.
+
+**Impact**: shared/tools.py contains generic tools. Skills contain the specific invocation instructions. This pattern scales to 50+ capabilities without proportional growth in tool definitions.
+
+---
+
+## 2026-02-08: LLM Statelessness and Conversation Memory Pattern
+
+**Decision**: Engine.run() returns (response_text, message_history) tuple. Application code passes full message_history on every call.
+
+**Context**: Discovered during Level 1 testing that LLMs are completely stateless — follow-up questions had no context from previous turns.
+
+**Rationale**: Pydantic AI's .all_messages() captures the full conversation including tool calls. This must be passed back as message_history parameter on subsequent calls. The engine returns the updated history so the chat loop can track it.
+
+**Impact**: engines/base.py return type is tuple[str, list]. All future engine levels must implement this pattern. Conversation history token count is now tracked in events for cost visibility.

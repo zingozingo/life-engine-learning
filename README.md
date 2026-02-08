@@ -35,7 +35,8 @@ make clean-logs       # wipe session files
 ```bash
 make start            # dashboard opens, chat starts
                       # ... interact ...
-quit                  # chat exits → dashboard stops automatically
+quit                  # chat exits, dashboard keeps running
+make stop             # stop dashboard when done for the day
 ```
 
 ## What It Does

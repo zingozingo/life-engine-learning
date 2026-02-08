@@ -56,7 +56,7 @@ A Travel Concierge AI assistant built five different ways, from monolith to full
   "level": 1,
   "timestamp": "ISO-8601",
   "event_type": "prompt_composed | classifier_decision | skill_loaded | tool_registered | proactive_fetch | tool_called | llm_response | error",
-  "decision_by": "code | llm",
+  "decision_by": "code | llm | human",
   "data": {
     "token_count": 0,
     "duration_ms": 0,
@@ -69,7 +69,7 @@ A Travel Concierge AI assistant built five different ways, from monolith to full
 
 ## Level Behaviors
 
-| Aspect | L1 | L2 | L3 | L4 | L5 |
+| Aspect | L1 *(done)* | L2 | L3 | L4 | L5 |
 |--------|----|----|----|----|-----|
 | System prompt | All skills hardcoded | Skill menu (summaries) | Route-specific | Route-specific + pre-fetched | Same as L4 |
 | Skill loading | N/A (all in prompt) | LLM calls load_skill | Code loads per route | Code loads per route | Code loads per route |
@@ -81,10 +81,10 @@ A Travel Concierge AI assistant built five different ways, from monolith to full
 
 ## Dashboard Views
 
-1. **Single Level View** — Pick a level, run queries, see the event timeline
-2. **Comparison View** — Same query, two levels side-by-side
-3. **Token Analysis** — Cost breakdown per level
-4. **Decision Map** — Color-coded: blue = code decided, orange = LLM decided
+1. **Single Level View** — Pick a level, run queries, see the event timeline *(implemented)*
+2. **Comparison View** — Same query, two levels side-by-side *(planned)*
+3. **Token Analysis** — Cost breakdown per level *(planned)*
+4. **Decision Map** — Color-coded: blue = code decided, orange = LLM decided, green = human decided *(integrated into timeline)*
 
 ---
 

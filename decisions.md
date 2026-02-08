@@ -39,3 +39,16 @@ Format: Date, decision title, and brief explanation of the choice and rationale.
 - Goal: master implicit vs explicit routing and proactive vs reactive data fetching through visual comparison
 - New skills: weather, flights, hotels, activities, currency, visa, packing
 - See docs/SPEC.md for full architecture specification
+
+---
+
+## 2025-02-08: Developer Experience
+
+**Decision**: Makefile for project commands (chat, dashboard, start, stop). FastAPI + uvicorn for dashboard server. Process management via PID files.
+
+**Details**:
+- `make start` runs dashboard in background, opens browser, starts chat in foreground
+- Dashboard auto-stops when chat exits (no orphan processes)
+- `make stop` cleans up any running dashboard processes
+- FastAPI serves dashboard UI and session API endpoints
+- Session data accessed via EventLogger.load_all_sessions()

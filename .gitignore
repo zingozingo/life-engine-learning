@@ -24,5 +24,8 @@ node_modules/
 # Event logs
 logs/
 
+# Process management
+.dashboard.pid
+
 # Archived experiments
 archive/

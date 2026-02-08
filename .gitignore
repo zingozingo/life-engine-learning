@@ -7,9 +7,19 @@ wheels/
 *.egg-info
 
 # Virtual environments
-.venv
+.venv/
 
+# Environment and secrets
 .env
+
+# Logfire credentials
+.logfire/
+
+# Node (for MCP servers)
+node_modules/
+
+# macOS
+.DS_Store
 
 # Archived experiments
 archive/

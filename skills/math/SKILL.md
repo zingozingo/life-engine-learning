@@ -1,6 +1,7 @@
 ---
 name: math
 description: Perform mathematical calculations
+status: planned
 ---
 
 # Math Skill

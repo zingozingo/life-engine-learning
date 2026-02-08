@@ -1,6 +1,7 @@
 ---
 name: database
 description: Query and manage database records
+status: planned
 ---
 
 # Database Skill

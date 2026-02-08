@@ -1,5 +1,6 @@
 /**
  * Travel Concierge Dashboard - Frontend Logic
+ * Two-level expansion: Data first, Education second
  */
 
 const API_BASE = '';
@@ -145,8 +146,8 @@ function renderTimeline(events) {
                     runningTokens += event.token_count;
                 }
 
-                // Get specific title and description for tool events
-                const { title, what } = getEventDisplay(event, annotation);
+                // Get specific title and description for this event
+                const { title, oneLiner } = getEventDisplay(event, annotation);
 
                 return `
                     <div class="event-node" data-event-index="${index}">
@@ -155,7 +156,7 @@ function renderTimeline(events) {
                             <div class="event-header" onclick="toggleEvent(this)">
                                 <div class="event-info">
                                     <div class="event-title">${title}</div>
-                                    <div class="event-what">${what}</div>
+                                    <div class="event-what">${oneLiner}</div>
                                 </div>
                                 <div class="event-stats">
                                     ${event.token_count ? `<span class="token-badge">+${event.token_count.toLocaleString()}</span>` : ''}
@@ -165,7 +166,9 @@ function renderTimeline(events) {
                                 </div>
                             </div>
                             <div class="event-detail">
-                                ${renderEventDetail(event, annotation)}
+                                ${renderEventData(event)}
+                                ${renderLearnSection(event, annotation)}
+                                ${renderRawData(event)}
                             </div>
                         </div>
                     </div>
@@ -175,132 +178,310 @@ function renderTimeline(events) {
     `;
 }
 
-// Get display title and description for an event, with specifics for tool events
+// Get display title and one-liner description built from actual event data
 function getEventDisplay(event, annotation) {
     const eventType = event.event_type;
     const data = event.data || {};
 
-    // Tool registered - show which tool
-    if (eventType === 'tool_registered') {
-        const toolName = data.tool_name || 'unknown';
-        return {
-            title: `Tool Registered: ${toolName}`,
-            what: `${toolName} is now available for the LLM to call during this query.`
-        };
-    }
+    switch (eventType) {
+        case 'prompt_composed': {
+            const skills = data.skills_included || [];
+            const chars = data.prompt_length || 0;
+            const tokens = event.token_count || Math.round(chars / 4);
+            return {
+                title: 'System Prompt Built',
+                oneLiner: `Loaded ${skills.length} skills: ${skills.join(', ')}. ${chars.toLocaleString()} chars (~${tokens.toLocaleString()} tokens).`
+            };
+        }
 
-    // Tool called - show which tool and what it did
-    if (eventType === 'tool_called') {
-        const toolName = data.tool_name || 'unknown';
-        let what = `The LLM called ${toolName}`;
+        case 'tool_registered': {
+            const toolName = data.tool_name || 'unknown';
+            const tokens = event.token_count || 0;
+            return {
+                title: `Tool Registered: ${toolName}`,
+                oneLiner: `${toolName} is now available. +${tokens} tokens for tool definition.`
+            };
+        }
 
-        // Add parameter details
-        if (data.parameters) {
-            if (data.parameters.url) {
-                // Extract domain from URL
+        case 'llm_request': {
+            const model = data.model || 'unknown';
+            const tokens = event.token_count || 0;
+            return {
+                title: 'Request Sent to LLM',
+                oneLiner: `Sent to ${model}. ~${tokens.toLocaleString()} input tokens.`
+            };
+        }
+
+        case 'tool_called': {
+            const toolName = data.tool_name || 'unknown';
+            const duration = event.duration_ms || 0;
+            let target = '';
+            if (data.parameters?.url) {
                 try {
                     const url = new URL(data.parameters.url);
-                    what += ` to fetch data from ${url.hostname}`;
+                    target = url.hostname + url.pathname.substring(0, 30);
                 } catch {
-                    what += ` with URL: ${data.parameters.url.substring(0, 50)}...`;
+                    target = data.parameters.url.substring(0, 40);
                 }
-            } else if (data.parameters.endpoint) {
-                what += ` (${data.parameters.endpoint})`;
+            } else if (data.parameters?.endpoint) {
+                target = data.parameters.endpoint;
             }
+            return {
+                title: `Tool Executed: ${toolName}`,
+                oneLiner: target ? `Called ${toolName}: ${target} - ${duration}ms` : `Called ${toolName} - ${duration}ms`
+            };
         }
 
-        // Add result preview if available
-        if (data.result_summary) {
-            const preview = data.result_summary.substring(0, 80);
-            what += `. Result: "${preview}${data.result_summary.length > 80 ? '...' : ''}"`;
+        case 'llm_response': {
+            const tokens = event.token_count || 0;
+            const duration = event.duration_ms || 0;
+            const length = data.response_length || 0;
+            return {
+                title: 'Response Generated',
+                oneLiner: `Generated ${tokens}-token response (${length.toLocaleString()} chars) in ${duration.toLocaleString()}ms.`
+            };
         }
 
-        return {
-            title: `Tool Executed: ${toolName}`,
-            what: what
-        };
-    }
+        case 'error': {
+            const msg = data.error_message || 'Unknown error';
+            return {
+                title: 'Error Occurred',
+                oneLiner: msg.substring(0, 100)
+            };
+        }
 
-    // Prompt composed - show skills included
-    if (eventType === 'prompt_composed' && data.skills_included) {
-        const skills = data.skills_included.join(', ');
-        return {
-            title: annotation.title || 'System Prompt Built',
-            what: `Loaded skills: ${skills}. ${data.prompt_length?.toLocaleString() || '?'} characters.`
-        };
+        default:
+            return {
+                title: annotation.title || formatEventType(eventType),
+                oneLiner: annotation.what || ''
+            };
     }
-
-    // Default: use annotation or format event type
-    return {
-        title: annotation.title || formatEventType(eventType),
-        what: annotation.what || ''
-    };
 }
 
-// Render event detail section
-function renderEventDetail(event, annotation) {
-    let html = '';
+// Render the DATA section (Level 1 expansion) - what actually happened
+function renderEventData(event) {
+    const eventType = event.event_type;
+    const data = event.data || {};
 
-    // Why section
-    if (annotation.why) {
-        html += `
-            <div class="detail-section">
-                <h4>Why This Happens</h4>
-                <p>${annotation.why}</p>
-            </div>
-        `;
+    switch (eventType) {
+        case 'prompt_composed':
+            return renderPromptData(event, data);
+        case 'tool_registered':
+            return renderToolRegisteredData(event, data);
+        case 'llm_request':
+            return renderLLMRequestData(event, data);
+        case 'tool_called':
+            return renderToolCalledData(event, data);
+        case 'llm_response':
+            return renderLLMResponseData(event, data);
+        case 'error':
+            return renderErrorData(event, data);
+        default:
+            return '';
     }
+}
 
-    // Four Questions
-    if (annotation.q1_who_decides) {
-        html += `
-            <div class="detail-section">
-                <h4>Four Questions</h4>
-                <div class="four-questions">
-                    <div class="question-card q1">
-                        <h5>Q1: Who Decides?</h5>
-                        <p>${annotation.q1_who_decides}</p>
-                    </div>
-                    <div class="question-card q2">
-                        <h5>Q2: What Does It See?</h5>
-                        <p>${annotation.q2_what_visible}</p>
-                    </div>
-                    <div class="question-card q3">
-                        <h5>Q3: What Can Go Wrong?</h5>
-                        <p>${annotation.q3_blast_radius}</p>
-                    </div>
-                    <div class="question-card q4">
-                        <h5>Q4: Where's the Human?</h5>
-                        <p>${annotation.q4_human_involved}</p>
-                    </div>
+function renderPromptData(event, data) {
+    const skills = data.skills_included || [];
+    const promptPreview = data.prompt_preview || '';
+    const promptLength = data.prompt_length || 0;
+
+    return `
+        <div class="data-section">
+            <div class="data-row">
+                <span class="data-label">Skills Loaded:</span>
+                <div class="skill-tags">
+                    ${skills.map(s => `<span class="skill-tag">${escapeHtml(s)}</span>`).join('')}
                 </div>
             </div>
-        `;
-    }
-
-    // Level Insight
-    if (annotation.level_insight) {
-        html += `
-            <div class="detail-section">
-                <div class="level-insight">
-                    <h5>How This Changes at Other Levels</h5>
-                    <p>${annotation.level_insight}</p>
-                </div>
+            <div class="data-row">
+                <span class="data-label">Size:</span>
+                <span class="data-value">${promptLength.toLocaleString()} characters (~${(event.token_count || Math.round(promptLength/4)).toLocaleString()} tokens)</span>
             </div>
-        `;
+            ${promptPreview ? `
+                <details class="data-expandable">
+                    <summary>View Prompt Preview</summary>
+                    <pre class="data-code">${escapeHtml(promptPreview)}</pre>
+                </details>
+            ` : ''}
+        </div>
+    `;
+}
+
+function renderToolRegisteredData(event, data) {
+    const toolName = data.tool_name || 'unknown';
+    return `
+        <div class="data-section">
+            <div class="data-row">
+                <span class="data-label">Tool:</span>
+                <span class="data-value mono">${escapeHtml(toolName)}</span>
+            </div>
+            <div class="data-row">
+                <span class="data-label">Token Cost:</span>
+                <span class="data-value">~${event.token_count || 0} tokens for tool definition</span>
+            </div>
+        </div>
+    `;
+}
+
+function renderLLMRequestData(event, data) {
+    const model = data.model || 'unknown';
+    return `
+        <div class="data-section">
+            <div class="data-row">
+                <span class="data-label">Model:</span>
+                <span class="data-value mono">${escapeHtml(model)}</span>
+            </div>
+            <div class="data-row">
+                <span class="data-label">Input Tokens:</span>
+                <span class="data-value">~${(event.token_count || 0).toLocaleString()} tokens</span>
+            </div>
+        </div>
+    `;
+}
+
+function renderToolCalledData(event, data) {
+    const toolName = data.tool_name || 'unknown';
+    const params = data.parameters || {};
+    const result = data.result_summary || '';
+    const duration = event.duration_ms || 0;
+
+    return `
+        <div class="data-section">
+            <div class="data-row">
+                <span class="data-label">Tool:</span>
+                <span class="data-value mono">${escapeHtml(toolName)}</span>
+            </div>
+            <div class="data-row">
+                <span class="data-label">Duration:</span>
+                <span class="data-value">${duration}ms</span>
+            </div>
+            <div class="data-block">
+                <span class="data-label">Parameters Sent:</span>
+                <pre class="data-code">${escapeHtml(JSON.stringify(params, null, 2))}</pre>
+            </div>
+            ${result ? `
+                <div class="data-block">
+                    <span class="data-label">Result Received:</span>
+                    <div class="result-preview">
+                        <pre class="data-code">${escapeHtml(result.length > 500 ? result.substring(0, 500) : result)}</pre>
+                        ${result.length > 500 ? `
+                            <details class="show-more-inline">
+                                <summary>Show full result (${result.length.toLocaleString()} chars)</summary>
+                                <pre class="data-code">${escapeHtml(result)}</pre>
+                            </details>
+                        ` : ''}
+                    </div>
+                </div>
+            ` : ''}
+        </div>
+    `;
+}
+
+function renderLLMResponseData(event, data) {
+    const responsePreview = data.response_preview || '';
+    const responseLength = data.response_length || 0;
+    const duration = event.duration_ms || 0;
+    const tokens = event.token_count || 0;
+
+    return `
+        <div class="data-section">
+            <div class="data-row">
+                <span class="data-label">Output:</span>
+                <span class="data-value">${tokens.toLocaleString()} tokens (${responseLength.toLocaleString()} chars) in ${duration.toLocaleString()}ms</span>
+            </div>
+            <div class="response-block">
+                <span class="data-label">Response Text:</span>
+                <div class="response-text">${escapeHtml(responsePreview)}</div>
+            </div>
+        </div>
+    `;
+}
+
+function renderErrorData(event, data) {
+    const errorMsg = data.error_message || 'Unknown error';
+    const detail = data.detail || {};
+
+    return `
+        <div class="data-section error-data">
+            <div class="data-block">
+                <span class="data-label">Error:</span>
+                <div class="error-message">${escapeHtml(errorMsg)}</div>
+            </div>
+            ${Object.keys(detail).length > 0 ? `
+                <div class="data-block">
+                    <span class="data-label">Details:</span>
+                    <pre class="data-code">${escapeHtml(JSON.stringify(detail, null, 2))}</pre>
+                </div>
+            ` : ''}
+        </div>
+    `;
+}
+
+// Render the LEARN section (Level 2 expansion) - education content
+function renderLearnSection(event, annotation) {
+    if (!annotation.why && !annotation.q1_who_decides) {
+        return '';
     }
 
-    // Raw data
-    if (event.data && Object.keys(event.data).length > 0) {
-        html += `
-            <details class="raw-data">
-                <summary>View Raw Event Data</summary>
-                <pre>${escapeHtml(JSON.stringify(event.data, null, 2))}</pre>
-            </details>
-        `;
+    return `
+        <details class="learn-section">
+            <summary class="learn-toggle">Learn: Why does this happen?</summary>
+            <div class="learn-content">
+                ${annotation.why ? `
+                    <div class="learn-why">
+                        <p>${annotation.why}</p>
+                    </div>
+                ` : ''}
+
+                ${annotation.q1_who_decides ? `
+                    <div class="four-questions-compact">
+                        <div class="q-row q1" onclick="toggleQRow(this)">
+                            <span class="q-label">Q1 WHO DECIDES:</span>
+                            <span class="q-preview">${truncate(annotation.q1_who_decides, 80)}</span>
+                            <div class="q-full">${annotation.q1_who_decides}</div>
+                        </div>
+                        <div class="q-row q2" onclick="toggleQRow(this)">
+                            <span class="q-label">Q2 WHAT VISIBLE:</span>
+                            <span class="q-preview">${truncate(annotation.q2_what_visible, 80)}</span>
+                            <div class="q-full">${annotation.q2_what_visible}</div>
+                        </div>
+                        <div class="q-row q3" onclick="toggleQRow(this)">
+                            <span class="q-label">Q3 BLAST RADIUS:</span>
+                            <span class="q-preview">${truncate(annotation.q3_blast_radius, 80)}</span>
+                            <div class="q-full">${annotation.q3_blast_radius}</div>
+                        </div>
+                        <div class="q-row q4" onclick="toggleQRow(this)">
+                            <span class="q-label">Q4 HUMAN:</span>
+                            <span class="q-preview">${truncate(annotation.q4_human_involved, 80)}</span>
+                            <div class="q-full">${annotation.q4_human_involved}</div>
+                        </div>
+                    </div>
+                ` : ''}
+
+                ${annotation.level_insight ? `
+                    <div class="level-insight">
+                        <h5>How This Changes at Other Levels</h5>
+                        <p>${annotation.level_insight}</p>
+                    </div>
+                ` : ''}
+            </div>
+        </details>
+    `;
+}
+
+// Render raw data section
+function renderRawData(event) {
+    if (!event.data || Object.keys(event.data).length === 0) {
+        return '';
     }
 
-    return html;
+    return `
+        <details class="raw-data">
+            <summary>View Raw Event Data</summary>
+            <pre>${escapeHtml(JSON.stringify(event.data, null, 2))}</pre>
+        </details>
+    `;
 }
 
 // Toggle query expansion
@@ -315,6 +496,19 @@ function toggleEvent(header) {
     node.classList.toggle('expanded');
 }
 
+// Toggle Q row expansion in compact Four Questions
+function toggleQRow(row) {
+    row.classList.toggle('expanded');
+    event.stopPropagation();
+}
+
+// Truncate text with ellipsis
+function truncate(text, maxLength) {
+    if (!text) return '';
+    if (text.length <= maxLength) return escapeHtml(text);
+    return escapeHtml(text.substring(0, maxLength)) + '...';
+}
+
 // Format event type to title case
 function formatEventType(type) {
     return type
@@ -325,7 +519,8 @@ function formatEventType(type) {
 
 // Escape HTML to prevent XSS
 function escapeHtml(text) {
+    if (text === null || text === undefined) return '';
     const div = document.createElement('div');
-    div.textContent = text;
+    div.textContent = String(text);
     return div.innerHTML;
 }

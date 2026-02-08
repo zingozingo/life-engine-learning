@@ -27,11 +27,11 @@ LEVELS = {
 
 def show_menu():
     """Display the engine selection menu."""
-    print("\n🧳 Travel Concierge - Life Engine Learning")
+    print("\nTravel Concierge - Life Engine Learning")
     print("=" * 50)
     print("\nAvailable engines:")
     for key, desc in LEVELS.items():
-        print(f"  {key} → {desc}")
+        print(f"  {key} -> {desc}")
     print("\nUsage: uv run python main.py <level>")
 
 
@@ -39,7 +39,7 @@ async def run_level_1():
     """Run the Level 1 Monolith engine."""
     from engines.level1_monolith import Level1Monolith
 
-    print("\n🧳 Travel Concierge - Level 1: Monolith")
+    print("\nTravel Concierge - Level 1: Monolith")
     print("=" * 50)
     print("All skills loaded in one giant prompt.")
     print("Type 'quit' to exit, 'prompt' to see the system prompt.\n")
@@ -47,10 +47,14 @@ async def run_level_1():
     engine = Level1Monolith()
     message_history = []
 
+    # Start a conversation that groups all queries in this chat session
+    conversation_id = engine.logger.start_conversation()
+    engine.set_conversation_id(conversation_id)
+
     # Show prompt size for demonstration
     prompt_len = len(engine.get_system_prompt())
-    print(f"📊 System prompt: {prompt_len:,} characters (~{prompt_len // 4:,} tokens)")
-    print(f"📚 Skills loaded: {', '.join(sorted(engine.skills.keys()))}\n")
+    print(f"System prompt: {prompt_len:,} characters (~{prompt_len // 4:,} tokens)")
+    print(f"Skills loaded: {', '.join(sorted(engine.skills.keys()))}\n")
 
     while True:
         try:
@@ -79,7 +83,7 @@ async def run_level_1():
             response, message_history = await engine.run(user_input, message_history)
             print(f"\nAssistant: {response}\n")
         except Exception as e:
-            print(f"\n❌ Error: {e}\n")
+            print(f"\nError: {e}\n")
 
 
 def main():
@@ -96,7 +100,7 @@ def main():
         asyncio.run(run_level_1())
     else:
         print(f"\n{LEVELS[level]}")
-        print("🚧 Not yet implemented. Coming soon!")
+        print("Not yet implemented. Coming soon!")
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@
     <div class="app">
         <!-- Header -->
         <header class="header">
-            <h1>🧳 Travel Concierge</h1>
+            <h1>Travel Concierge</h1>
             <span class="subtitle">Agent Architecture Explorer</span>
         </header>
 
@@ -19,8 +19,8 @@
             <!-- Sidebar -->
             <aside class="sidebar">
                 <div class="sidebar-header">
-                    <h2>Sessions</h2>
-                    <button id="refresh-btn" class="btn-icon" title="Refresh sessions">↻</button>
+                    <h2>Conversations</h2>
+                    <button id="refresh-btn" class="btn-icon" title="Refresh">&#8635;</button>
                 </div>
 
                 <div class="filter-section">
@@ -35,29 +35,29 @@
                     </select>
                 </div>
 
-                <div id="session-list" class="session-list">
-                    <div class="loading">Loading sessions...</div>
+                <div id="conversation-list" class="conversation-list">
+                    <div class="loading">Loading conversations...</div>
                 </div>
             </aside>
 
             <!-- Main Content -->
             <main class="content">
                 <div id="empty-state" class="empty-state">
-                    <div class="empty-icon">📋</div>
-                    <h3>Select a Session</h3>
-                    <p>Choose a session from the sidebar to view its event timeline with Four Questions annotations.</p>
+                    <div class="empty-icon">[...]</div>
+                    <h3>Select a Conversation</h3>
+                    <p>Choose a conversation from the sidebar to view its queries and event timelines with Four Questions annotations.</p>
                 </div>
 
-                <div id="timeline-container" class="timeline-container" style="display: none;">
-                    <div class="session-header">
-                        <div class="session-meta">
-                            <span id="session-level" class="level-badge">L1</span>
-                            <h2 id="session-query"></h2>
+                <div id="conversation-container" class="conversation-container" style="display: none;">
+                    <div class="conversation-header">
+                        <div class="conversation-meta">
+                            <span id="conversation-level" class="level-badge">L1</span>
+                            <h2 id="conversation-title"></h2>
                         </div>
-                        <div class="session-stats">
-                            <span class="stat"><strong id="session-tokens">0</strong> tokens</span>
-                            <span class="stat"><strong id="session-events">0</strong> events</span>
-                            <span class="stat" id="session-time"></span>
+                        <div class="conversation-stats">
+                            <span class="stat"><strong id="conversation-queries">0</strong> queries</span>
+                            <span class="stat"><strong id="conversation-tokens">0</strong> total tokens</span>
+                            <span class="stat" id="conversation-time"></span>
                         </div>
                     </div>
 
@@ -67,7 +67,7 @@
                         <span class="legend-item"><span class="dot human"></span> Human Decision</span>
                     </div>
 
-                    <div id="timeline" class="timeline"></div>
+                    <div id="queries-container" class="queries-container"></div>
                 </div>
             </main>
         </div>

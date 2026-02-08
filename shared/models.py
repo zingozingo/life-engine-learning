@@ -62,6 +62,7 @@ class QuerySession(BaseModel):
     """A complete query from start to finish with all events.
 
     Each query the user submits creates one QuerySession.
+    Multiple QuerySessions share a conversation_id if they're in the same chat.
     The session is written to logs/ when the query completes.
     """
 
@@ -77,6 +78,19 @@ class QuerySession(BaseModel):
     )
     total_tokens: int = Field(
         default=0, description="Sum of tokens across all events"
+    )
+    # Conversation grouping fields (with defaults for backward compatibility)
+    conversation_id: str | None = Field(
+        default=None,
+        description="UUID grouping queries in the same chat session. Defaults to query_id for legacy sessions.",
+    )
+    sequence: int = Field(
+        default=1,
+        description="Order of this query within the conversation (1, 2, 3...)",
+    )
+    conversation_history_tokens: int | None = Field(
+        default=None,
+        description="Tokens of prior conversation history sent with this query",
     )
 
     def compute_total_tokens(self) -> int:

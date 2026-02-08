@@ -25,6 +25,7 @@ class Level1Monolith(BaseEngine):
 
     def __init__(self):
         """Initialize the monolith engine with all skills loaded."""
+        super().__init__()  # Initialize base engine state
         self.logger = EventLogger(level=1)
 
         # Build the giant system prompt with all skills
@@ -101,8 +102,19 @@ class Level1Monolith(BaseEngine):
         Returns:
             Tuple of (response_text, updated_message_history)
         """
-        # Start query session
-        query_id = self.logger.start_query(user_message)
+        # Increment sequence for this query in the conversation
+        self._sequence += 1
+
+        # Estimate conversation history tokens (~4 chars per token)
+        history_tokens = len(str(message_history)) // 4 if message_history else 0
+
+        # Start query session with conversation context
+        query_id = self.logger.start_query(
+            user_message,
+            conversation_id=self._conversation_id,
+            sequence=self._sequence,
+            conversation_history_tokens=history_tokens,
+        )
         self._current_query_id = query_id
 
         try:

@@ -5,133 +5,171 @@
 const API_BASE = '';
 
 // State
-let sessions = [];
-let currentSession = null;
+let conversations = [];
+let currentConversation = null;
+let currentSessions = [];
 
 // DOM Elements
-const sessionList = document.getElementById('session-list');
+const conversationList = document.getElementById('conversation-list');
 const levelFilter = document.getElementById('level-filter');
 const refreshBtn = document.getElementById('refresh-btn');
 const emptyState = document.getElementById('empty-state');
-const timelineContainer = document.getElementById('timeline-container');
-const timeline = document.getElementById('timeline');
+const conversationContainer = document.getElementById('conversation-container');
+const queriesContainer = document.getElementById('queries-container');
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    loadSessions();
+    loadConversations();
 
-    refreshBtn.addEventListener('click', loadSessions);
-    levelFilter.addEventListener('change', renderSessionList);
+    refreshBtn.addEventListener('click', loadConversations);
+    levelFilter.addEventListener('change', renderConversationList);
 });
 
-// Load sessions from API
-async function loadSessions() {
-    sessionList.innerHTML = '<div class="loading">Loading sessions...</div>';
+// Load conversations from API
+async function loadConversations() {
+    conversationList.innerHTML = '<div class="loading">Loading conversations...</div>';
 
     try {
-        const response = await fetch(`${API_BASE}/api/sessions`);
-        sessions = await response.json();
-        sessions.sort((a, b) => new Date(b.started_at) - new Date(a.started_at));
-        renderSessionList();
+        const response = await fetch(`${API_BASE}/api/conversations`);
+        conversations = await response.json();
+        renderConversationList();
     } catch (error) {
-        sessionList.innerHTML = '<div class="loading">Failed to load sessions</div>';
-        console.error('Failed to load sessions:', error);
+        conversationList.innerHTML = '<div class="loading">Failed to load conversations</div>';
+        console.error('Failed to load conversations:', error);
     }
 }
 
-// Render session list
-function renderSessionList() {
+// Render conversation list in sidebar
+function renderConversationList() {
     const filterLevel = levelFilter.value;
     const filtered = filterLevel === 'all'
-        ? sessions
-        : sessions.filter(s => s.level.toString() === filterLevel);
+        ? conversations
+        : conversations.filter(c => c.level.toString() === filterLevel);
 
     if (filtered.length === 0) {
-        sessionList.innerHTML = '<div class="loading">No sessions found</div>';
+        conversationList.innerHTML = '<div class="loading">No conversations found</div>';
         return;
     }
 
-    sessionList.innerHTML = filtered.map(session => `
-        <div class="session-item ${currentSession?.query_id === session.query_id ? 'active' : ''}"
-             data-id="${session.query_id}">
-            <div class="query">${escapeHtml(session.query_text)}</div>
+    conversationList.innerHTML = filtered.map(conv => `
+        <div class="conversation-item ${currentConversation?.conversation_id === conv.conversation_id ? 'active' : ''}"
+             data-id="${conv.conversation_id}">
+            <div class="title">${escapeHtml(conv.queries[0] || 'Empty conversation')}</div>
             <div class="meta">
-                <span class="level-badge">L${session.level}</span>
-                <span>${session.total_tokens.toLocaleString()} tokens</span>
-                <span>${session.event_count} events</span>
+                <span class="level-badge">L${conv.level}</span>
+                <span>${conv.query_count} ${conv.query_count === 1 ? 'query' : 'queries'}</span>
+                <span>${conv.total_tokens.toLocaleString()} tokens</span>
             </div>
         </div>
     `).join('');
 
     // Add click handlers
-    sessionList.querySelectorAll('.session-item').forEach(item => {
-        item.addEventListener('click', () => loadSession(item.dataset.id));
+    conversationList.querySelectorAll('.conversation-item').forEach(item => {
+        item.addEventListener('click', () => loadConversation(item.dataset.id));
     });
 }
 
-// Load a specific session
-async function loadSession(queryId) {
+// Load a specific conversation
+async function loadConversation(conversationId) {
     try {
-        const response = await fetch(`${API_BASE}/api/sessions/${queryId}?annotated=true`);
-        currentSession = await response.json();
-        renderTimeline();
-        renderSessionList(); // Update active state
+        const response = await fetch(`${API_BASE}/api/conversations/${conversationId}?annotated=true`);
+        currentSessions = await response.json();
+
+        // Find conversation metadata
+        currentConversation = conversations.find(c => c.conversation_id === conversationId);
+
+        renderConversation();
+        renderConversationList(); // Update active state
     } catch (error) {
-        console.error('Failed to load session:', error);
+        console.error('Failed to load conversation:', error);
     }
 }
 
-// Render the event timeline
-function renderTimeline() {
-    if (!currentSession) return;
+// Render the conversation with all queries
+function renderConversation() {
+    if (!currentConversation || !currentSessions.length) return;
 
     emptyState.style.display = 'none';
-    timelineContainer.style.display = 'block';
+    conversationContainer.style.display = 'block';
 
     // Update header
-    document.getElementById('session-level').textContent = `L${currentSession.level}`;
-    document.getElementById('session-query').textContent = currentSession.query_text;
-    document.getElementById('session-tokens').textContent = currentSession.total_tokens.toLocaleString();
-    document.getElementById('session-events').textContent = currentSession.events.length;
+    document.getElementById('conversation-level').textContent = `L${currentConversation.level}`;
+    document.getElementById('conversation-title').textContent = 'Conversation';
+    document.getElementById('conversation-queries').textContent = currentConversation.query_count;
+    document.getElementById('conversation-tokens').textContent = currentConversation.total_tokens.toLocaleString();
 
-    const startTime = new Date(currentSession.started_at);
-    const endTime = currentSession.ended_at ? new Date(currentSession.ended_at) : null;
+    const startTime = new Date(currentConversation.started_at);
+    const endTime = currentConversation.ended_at ? new Date(currentConversation.ended_at) : null;
     const duration = endTime ? Math.round((endTime - startTime) / 1000) : null;
-    document.getElementById('session-time').textContent = duration ? `${duration}s total` : '';
+    document.getElementById('conversation-time').textContent = duration ? `${duration}s total` : '';
 
-    // Render events
-    let runningTokens = 0;
-    timeline.innerHTML = currentSession.events.map((event, index) => {
-        const annotation = event.annotation || {};
-        const decisionMaker = annotation.decision_maker || event.decision_by || 'code';
-
-        if (event.token_count) {
-            runningTokens += event.token_count;
-        }
+    // Render each query section
+    queriesContainer.innerHTML = currentSessions.map((session, queryIndex) => {
+        const historyTokens = session.conversation_history_tokens || 0;
+        const historyLabel = queryIndex === 0
+            ? 'First message (no history)'
+            : `Conversation history: ~${historyTokens.toLocaleString()} tokens`;
 
         return `
-            <div class="event-node" data-index="${index}">
-                <div class="event-dot ${decisionMaker}"></div>
-                <div class="event-card">
-                    <div class="event-header" onclick="toggleEvent(${index})">
-                        <div class="event-info">
-                            <div class="event-title">${annotation.title || formatEventType(event.event_type)}</div>
-                            <div class="event-what">${annotation.what || ''}</div>
-                        </div>
-                        <div class="event-stats">
-                            ${event.token_count ? `<span class="token-badge">+${event.token_count.toLocaleString()}</span>` : ''}
-                            ${event.duration_ms ? `<span class="duration-badge">${event.duration_ms}ms</span>` : ''}
-                            ${runningTokens > 0 ? `<span class="running-total">Σ ${runningTokens.toLocaleString()}</span>` : ''}
-                            <span class="expand-icon">▼</span>
-                        </div>
+            <div class="query-section" data-query-index="${queryIndex}">
+                <div class="query-header" onclick="toggleQuery(${queryIndex})">
+                    <div class="query-info">
+                        <div class="query-number">Query ${queryIndex + 1}</div>
+                        <div class="query-text">${escapeHtml(session.query_text)}</div>
+                        <div class="query-history">${historyLabel}</div>
                     </div>
-                    <div class="event-detail">
-                        ${renderEventDetail(event, annotation)}
+                    <div class="query-stats">
+                        <span class="query-token-badge">${session.total_tokens.toLocaleString()} tokens</span>
+                        <span class="expand-icon">&#9660;</span>
                     </div>
+                </div>
+                <div class="query-timeline">
+                    ${renderTimeline(session.events)}
                 </div>
             </div>
         `;
     }).join('');
+}
+
+// Render the event timeline for a query
+function renderTimeline(events) {
+    let runningTokens = 0;
+
+    return `
+        <div class="timeline">
+            ${events.map((event, index) => {
+                const annotation = event.annotation || {};
+                const decisionMaker = annotation.decision_maker || event.decision_by || 'code';
+
+                if (event.token_count) {
+                    runningTokens += event.token_count;
+                }
+
+                return `
+                    <div class="event-node" data-event-index="${index}">
+                        <div class="event-dot ${decisionMaker}"></div>
+                        <div class="event-card">
+                            <div class="event-header" onclick="toggleEvent(this)">
+                                <div class="event-info">
+                                    <div class="event-title">${annotation.title || formatEventType(event.event_type)}</div>
+                                    <div class="event-what">${annotation.what || ''}</div>
+                                </div>
+                                <div class="event-stats">
+                                    ${event.token_count ? `<span class="token-badge">+${event.token_count.toLocaleString()}</span>` : ''}
+                                    ${event.duration_ms ? `<span class="duration-badge">${event.duration_ms}ms</span>` : ''}
+                                    ${runningTokens > 0 ? `<span class="running-total">S ${runningTokens.toLocaleString()}</span>` : ''}
+                                    <span class="expand-icon">&#9660;</span>
+                                </div>
+                            </div>
+                            <div class="event-detail">
+                                ${renderEventDetail(event, annotation)}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
 }
 
 // Render event detail section
@@ -180,7 +218,7 @@ function renderEventDetail(event, annotation) {
         html += `
             <div class="detail-section">
                 <div class="level-insight">
-                    <h5>💡 How This Changes at Other Levels</h5>
+                    <h5>How This Changes at Other Levels</h5>
                     <p>${annotation.level_insight}</p>
                 </div>
             </div>
@@ -200,9 +238,15 @@ function renderEventDetail(event, annotation) {
     return html;
 }
 
+// Toggle query expansion
+function toggleQuery(queryIndex) {
+    const section = document.querySelector(`.query-section[data-query-index="${queryIndex}"]`);
+    section.classList.toggle('expanded');
+}
+
 // Toggle event expansion
-function toggleEvent(index) {
-    const node = document.querySelector(`.event-node[data-index="${index}"]`);
+function toggleEvent(header) {
+    const node = header.closest('.event-node');
     node.classList.toggle('expanded');
 }
 

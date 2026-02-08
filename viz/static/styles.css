@@ -124,13 +124,13 @@ body {
     font-size: 0.875rem;
 }
 
-.session-list {
+.conversation-list {
     flex: 1;
     overflow-y: auto;
     padding: 0.5rem;
 }
 
-.session-item {
+.conversation-item {
     padding: 0.75rem;
     background: var(--bg-card);
     border-radius: 8px;
@@ -140,17 +140,17 @@ body {
     transition: all 0.2s;
 }
 
-.session-item:hover {
+.conversation-item:hover {
     background: var(--bg-card-hover);
     border-color: var(--border-color);
 }
 
-.session-item.active {
+.conversation-item.active {
     border-color: var(--accent-blue);
     background: var(--bg-card-hover);
 }
 
-.session-item .query {
+.conversation-item .title {
     font-size: 0.875rem;
     margin-bottom: 0.5rem;
     display: -webkit-box;
@@ -159,7 +159,7 @@ body {
     overflow: hidden;
 }
 
-.session-item .meta {
+.conversation-item .meta {
     display: flex;
     gap: 0.75rem;
     font-size: 0.75rem;
@@ -200,9 +200,10 @@ body {
 }
 
 .empty-icon {
-    font-size: 4rem;
+    font-size: 2rem;
     margin-bottom: 1rem;
     opacity: 0.5;
+    font-family: monospace;
 }
 
 .empty-state h3 {
@@ -210,31 +211,31 @@ body {
     margin-bottom: 0.5rem;
 }
 
-/* Session Header */
-.session-header {
+/* Conversation Header */
+.conversation-header {
     margin-bottom: 1.5rem;
 }
 
-.session-meta {
+.conversation-meta {
     display: flex;
     align-items: center;
     gap: 1rem;
     margin-bottom: 0.75rem;
 }
 
-.session-meta h2 {
+.conversation-meta h2 {
     font-size: 1.25rem;
     font-weight: 500;
 }
 
-.session-stats {
+.conversation-stats {
     display: flex;
     gap: 1.5rem;
     font-size: 0.875rem;
     color: var(--text-secondary);
 }
 
-.session-stats .stat strong {
+.conversation-stats .stat strong {
     color: var(--text-primary);
 }
 
@@ -265,6 +266,95 @@ body {
 .dot.llm { background: var(--accent-orange); }
 .dot.human { background: var(--accent-green); }
 
+/* Query Sections */
+.queries-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.query-section {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.query-header {
+    padding: 1rem;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    transition: background 0.2s;
+}
+
+.query-header:hover {
+    background: var(--bg-card-hover);
+}
+
+.query-info {
+    flex: 1;
+}
+
+.query-number {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.25rem;
+}
+
+.query-text {
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin-bottom: 0.5rem;
+}
+
+.query-history {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    padding: 0.25rem 0.5rem;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+    display: inline-block;
+}
+
+.query-stats {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.25rem;
+    flex-shrink: 0;
+}
+
+.query-token-badge {
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 0.75rem;
+    color: var(--accent-blue);
+}
+
+.expand-icon {
+    color: var(--text-muted);
+    transition: transform 0.2s;
+}
+
+.query-section.expanded .expand-icon {
+    transform: rotate(180deg);
+}
+
+.query-timeline {
+    display: none;
+    border-top: 1px solid var(--border-color);
+    padding: 1rem;
+    background: var(--bg-secondary);
+}
+
+.query-section.expanded .query-timeline {
+    display: block;
+}
+
 /* Timeline */
 .timeline {
     position: relative;
@@ -286,6 +376,10 @@ body {
     margin-bottom: 1rem;
 }
 
+.event-node:last-child {
+    margin-bottom: 0;
+}
+
 .event-dot {
     position: absolute;
     left: -2rem;
@@ -293,7 +387,7 @@ body {
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    border: 3px solid var(--bg-primary);
+    border: 3px solid var(--bg-secondary);
     z-index: 1;
 }
 
@@ -362,11 +456,6 @@ body {
 .running-total {
     font-size: 0.7rem;
     color: var(--text-muted);
-}
-
-.expand-icon {
-    color: var(--text-muted);
-    transition: transform 0.2s;
 }
 
 .event-node.expanded .expand-icon {

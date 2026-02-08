@@ -67,9 +67,9 @@ async def index():
     </head>
     <body>
         <div class="container">
-            <h1>🧳 Travel Concierge</h1>
+            <h1>Travel Concierge</h1>
             <p class="subtitle">Multi-Level Agent Architecture Dashboard</p>
-            <div class="status">🚧 Static files not found. Run from project root.</div>
+            <div class="status">Static files not found. Run from project root.</div>
         </div>
     </body>
     </html>
@@ -129,5 +129,62 @@ async def get_session(query_id: str, annotated: bool = Query(default=False)):
             event_type = event["event_type"]
             annotation = get_annotation_for_event(event_type, result["level"])
             event["annotation"] = annotation
+
+    return result
+
+
+@app.get("/api/conversations")
+async def list_conversations():
+    """List all conversations (grouped queries)."""
+    conversations = EventLogger.load_conversations()
+    result = []
+
+    for conv_id, sessions in conversations.items():
+        if not sessions:
+            continue
+        first_session = sessions[0]
+        last_session = sessions[-1]
+
+        result.append({
+            "conversation_id": conv_id,
+            "level": first_session.level,
+            "query_count": len(sessions),
+            "queries": [s.query_text for s in sessions],
+            "total_tokens": sum(s.total_tokens for s in sessions),
+            "started_at": first_session.started_at.isoformat(),
+            "ended_at": last_session.ended_at.isoformat() if last_session.ended_at else None,
+        })
+
+    # Sort by started_at descending (newest first)
+    result.sort(key=lambda c: c["started_at"], reverse=True)
+    return result
+
+
+@app.get("/api/conversations/{conversation_id}")
+async def get_conversation(conversation_id: str, annotated: bool = Query(default=False)):
+    """Get all sessions in a conversation, ordered by sequence.
+
+    Args:
+        conversation_id: The conversation ID
+        annotated: If true, include Four Questions annotations for each event
+    """
+    conversations = EventLogger.load_conversations()
+
+    if conversation_id not in conversations:
+        raise HTTPException(status_code=404, detail=f"Conversation {conversation_id} not found")
+
+    sessions = conversations[conversation_id]
+    result = []
+
+    for session in sessions:
+        session_data = session.model_dump()
+
+        if annotated:
+            for event in session_data["events"]:
+                event_type = event["event_type"]
+                annotation = get_annotation_for_event(event_type, session_data["level"])
+                event["annotation"] = annotation
+
+        result.append(session_data)
 
     return result

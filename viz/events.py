@@ -43,22 +43,46 @@ class EventLogger:
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(exist_ok=True)
         self._active_sessions: dict[str, QuerySession] = {}
+        self._current_conversation_id: str | None = None
 
-    def start_query(self, query_text: str) -> str:
+    def start_conversation(self) -> str:
+        """Begin a new conversation that will group multiple queries.
+
+        Returns:
+            conversation_id (UUID string) to pass to start_query()
+        """
+        self._current_conversation_id = str(uuid.uuid4())
+        return self._current_conversation_id
+
+    def start_query(
+        self,
+        query_text: str,
+        conversation_id: str | None = None,
+        sequence: int = 1,
+        conversation_history_tokens: int | None = None,
+    ) -> str:
         """Begin a new query session.
 
         Args:
             query_text: The user's input query
+            conversation_id: UUID grouping queries in same chat (defaults to query_id)
+            sequence: Order within conversation (1, 2, 3...)
+            conversation_history_tokens: Tokens of prior history sent with this query
 
         Returns:
             query_id (UUID string) for use in subsequent log calls
         """
         query_id = str(uuid.uuid4())
+        # Use provided conversation_id, or fall back to query_id (single-query conversation)
+        effective_conversation_id = conversation_id or query_id
         session = QuerySession(
             query_id=query_id,
             level=self.level,
             query_text=query_text,
             started_at=datetime.now(timezone.utc),
+            conversation_id=effective_conversation_id,
+            sequence=sequence,
+            conversation_history_tokens=conversation_history_tokens,
         )
         self._active_sessions[query_id] = session
         return query_id
@@ -315,3 +339,29 @@ class EventLogger:
                 print(f"Warning: Could not load {filepath}: {e}")
 
         return sorted(sessions, key=lambda s: s.started_at)
+
+    @classmethod
+    def load_conversations(cls, log_dir: str = "logs") -> dict[str, list[QuerySession]]:
+        """Load all sessions grouped by conversation.
+
+        Args:
+            log_dir: Directory containing session files
+
+        Returns:
+            Dict mapping conversation_id to list of QuerySessions sorted by sequence
+        """
+        sessions = cls.load_all_sessions(log_dir)
+        conversations: dict[str, list[QuerySession]] = {}
+
+        for session in sessions:
+            # For legacy sessions without conversation_id, use query_id
+            conv_id = session.conversation_id or session.query_id
+            if conv_id not in conversations:
+                conversations[conv_id] = []
+            conversations[conv_id].append(session)
+
+        # Sort each conversation's queries by sequence number
+        for conv_id in conversations:
+            conversations[conv_id].sort(key=lambda s: s.sequence)
+
+        return conversations

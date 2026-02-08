@@ -66,3 +66,17 @@ Format: Date, decision title, and brief explanation of the choice and rationale.
 - Session timeline view with expandable event details
 - Vanilla HTML + CSS + JS, no frameworks — keeps it simple for a learning project
 - This scales automatically as new levels are added
+
+---
+
+## 2025-02-08: Conversation Grouping
+
+**Decision**: Added conversation_id and sequence to QuerySession model. Dashboard shows conversations (grouped queries) instead of individual messages.
+
+**Details**:
+- EventLogger.start_conversation() generates a conversation_id shared across all queries in a chat session
+- QuerySession now tracks: conversation_id, sequence (order within conversation), conversation_history_tokens (accumulating context cost)
+- Dashboard sidebar shows conversations with first query as title, query count, and total tokens
+- Main area shows all queries in a conversation sequentially, each with its own collapsible event timeline
+- Legacy sessions without conversation_id are treated as single-query conversations (backward compatible)
+- No emoji in UI — clean text and CSS only

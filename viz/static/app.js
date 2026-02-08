@@ -145,14 +145,17 @@ function renderTimeline(events) {
                     runningTokens += event.token_count;
                 }
 
+                // Get specific title and description for tool events
+                const { title, what } = getEventDisplay(event, annotation);
+
                 return `
                     <div class="event-node" data-event-index="${index}">
                         <div class="event-dot ${decisionMaker}"></div>
                         <div class="event-card">
                             <div class="event-header" onclick="toggleEvent(this)">
                                 <div class="event-info">
-                                    <div class="event-title">${annotation.title || formatEventType(event.event_type)}</div>
-                                    <div class="event-what">${annotation.what || ''}</div>
+                                    <div class="event-title">${title}</div>
+                                    <div class="event-what">${what}</div>
                                 </div>
                                 <div class="event-stats">
                                     ${event.token_count ? `<span class="token-badge">+${event.token_count.toLocaleString()}</span>` : ''}
@@ -170,6 +173,68 @@ function renderTimeline(events) {
             }).join('')}
         </div>
     `;
+}
+
+// Get display title and description for an event, with specifics for tool events
+function getEventDisplay(event, annotation) {
+    const eventType = event.event_type;
+    const data = event.data || {};
+
+    // Tool registered - show which tool
+    if (eventType === 'tool_registered') {
+        const toolName = data.tool_name || 'unknown';
+        return {
+            title: `Tool Registered: ${toolName}`,
+            what: `${toolName} is now available for the LLM to call during this query.`
+        };
+    }
+
+    // Tool called - show which tool and what it did
+    if (eventType === 'tool_called') {
+        const toolName = data.tool_name || 'unknown';
+        let what = `The LLM called ${toolName}`;
+
+        // Add parameter details
+        if (data.parameters) {
+            if (data.parameters.url) {
+                // Extract domain from URL
+                try {
+                    const url = new URL(data.parameters.url);
+                    what += ` to fetch data from ${url.hostname}`;
+                } catch {
+                    what += ` with URL: ${data.parameters.url.substring(0, 50)}...`;
+                }
+            } else if (data.parameters.endpoint) {
+                what += ` (${data.parameters.endpoint})`;
+            }
+        }
+
+        // Add result preview if available
+        if (data.result_summary) {
+            const preview = data.result_summary.substring(0, 80);
+            what += `. Result: "${preview}${data.result_summary.length > 80 ? '...' : ''}"`;
+        }
+
+        return {
+            title: `Tool Executed: ${toolName}`,
+            what: what
+        };
+    }
+
+    // Prompt composed - show skills included
+    if (eventType === 'prompt_composed' && data.skills_included) {
+        const skills = data.skills_included.join(', ');
+        return {
+            title: annotation.title || 'System Prompt Built',
+            what: `Loaded skills: ${skills}. ${data.prompt_length?.toLocaleString() || '?'} characters.`
+        };
+    }
+
+    // Default: use annotation or format event type
+    return {
+        title: annotation.title || formatEventType(eventType),
+        what: annotation.what || ''
+    };
 }
 
 // Render event detail section

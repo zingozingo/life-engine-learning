@@ -1,56 +1,58 @@
 # Life Engine Learning - Developer Commands
 # Run `make help` to see available commands
 
-.PHONY: help chat dashboard start stop status logs clean-logs install
+.PHONY: help chat dashboard start stop restart status logs clean-logs install
 
 # Default target
 help:
 	@echo "Life Engine Learning - Available Commands"
 	@echo "=========================================="
 	@echo ""
+	@echo "  make dashboard       Start dashboard server (background)"
 	@echo "  make chat [level=N]  Run chatbot (default level=1)"
-	@echo "  make dashboard       Start dashboard server (foreground)"
-	@echo "  make start           Start dashboard + chat together"
-	@echo "  make stop            Stop any running dashboard"
+	@echo "  make start           Start dashboard (if needed) + chat"
+	@echo "  make stop            Stop dashboard server"
+	@echo "  make restart         Restart dashboard server"
 	@echo "  make status          Show what's running"
 	@echo "  make logs            List recent session files"
 	@echo "  make clean-logs      Delete all session files"
 	@echo "  make install         Install dependencies (uv sync)"
 	@echo ""
+	@echo "Dashboard is a persistent service. Chat sessions are independent."
+	@echo "Start dashboard once, run multiple chat sessions, stop when done."
+	@echo ""
 
 # Default level for chat
 level ?= 1
 
-# Run the chatbot interactively
-chat:
-	uv run python main.py $(level)
-
-# Start dashboard server in foreground
+# Start dashboard server in background (idempotent - safe to call multiple times)
 dashboard:
-	uv run uvicorn viz.server:app --reload --port 8000
-
-# Start dashboard + chat together
-start: stop
-	@echo "Starting dashboard on http://localhost:8000..."
-	@uv run uvicorn viz.server:app --port 8000 > /dev/null 2>&1 & echo $$! > .dashboard.pid
-	@sleep 2
 	@if lsof -i :8000 > /dev/null 2>&1; then \
-		echo "Dashboard running (PID: $$(cat .dashboard.pid))"; \
-		open http://localhost:8000 2>/dev/null || true; \
+		echo "Dashboard already running at http://localhost:8000"; \
 	else \
-		echo "Failed to start dashboard"; \
-		rm -f .dashboard.pid; \
-		exit 1; \
+		echo "Starting dashboard..."; \
+		uv run uvicorn viz.server:app --port 8000 > /dev/null 2>&1 & echo $$! > .dashboard.pid; \
+		sleep 2; \
+		if lsof -i :8000 > /dev/null 2>&1; then \
+			echo "Dashboard running at http://localhost:8000"; \
+			open http://localhost:8000 2>/dev/null || true; \
+		else \
+			echo "Failed to start dashboard"; \
+			rm -f .dashboard.pid; \
+			exit 1; \
+		fi; \
 	fi
-	@echo ""
-	@echo "Starting chat (type 'quit' to exit)..."
-	@echo ""
-	@uv run python main.py $(level) || true
-	@echo ""
-	@echo "Chat ended. Stopping dashboard..."
-	@$(MAKE) -s stop
 
-# Stop any running dashboard
+# Run the chatbot interactively (dashboard-independent)
+chat:
+	@uv run python main.py $(level)
+
+# Start dashboard (if not running) then start chat
+start: dashboard
+	@echo ""
+	@$(MAKE) -s chat level=$(level)
+
+# Stop the dashboard server
 stop:
 	@if [ -f .dashboard.pid ]; then \
 		PID=$$(cat .dashboard.pid); \
@@ -61,20 +63,24 @@ stop:
 		rm -f .dashboard.pid; \
 	fi
 	@# Safety net: kill any uvicorn on port 8000
-	@lsof -ti :8000 | xargs kill 2>/dev/null || true
+	@PID=$$(lsof -ti :8000 2>/dev/null); \
+	if [ -n "$$PID" ]; then \
+		kill $$PID 2>/dev/null; \
+		echo "Stopped process on port 8000 (PID: $$PID)"; \
+	fi
+	@if ! lsof -i :8000 > /dev/null 2>&1; then \
+		echo "Dashboard stopped"; \
+	fi
+
+# Restart the dashboard
+restart: stop dashboard
 
 # Show what's running
 status:
 	@echo "Dashboard status:"
-	@if [ -f .dashboard.pid ]; then \
-		PID=$$(cat .dashboard.pid); \
-		if kill -0 $$PID 2>/dev/null; then \
-			echo "  Running (PID: $$PID)"; \
-		else \
-			echo "  Not running (stale PID file)"; \
-		fi; \
-	elif lsof -i :8000 > /dev/null 2>&1; then \
-		echo "  Running on port 8000 (no PID file)"; \
+	@if lsof -i :8000 > /dev/null 2>&1; then \
+		PID=$$(lsof -ti :8000 2>/dev/null); \
+		echo "  Running at http://localhost:8000 (PID: $$PID)"; \
 	else \
 		echo "  Not running"; \
 	fi

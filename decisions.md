@@ -47,9 +47,10 @@ Format: Date, decision title, and brief explanation of the choice and rationale.
 **Decision**: Makefile for project commands (chat, dashboard, start, stop). FastAPI + uvicorn for dashboard server. Process management via PID files.
 
 **Details**:
-- `make start` runs dashboard in background, opens browser, starts chat in foreground
-- Dashboard auto-stops when chat exits (no orphan processes)
-- `make stop` cleans up any running dashboard processes
+- `make dashboard` starts dashboard as a persistent background service
+- `make chat` runs chatbot independently of dashboard
+- `make start` ensures dashboard is running, then starts chat
+- `make stop` is the only way to kill the dashboard
 - FastAPI serves dashboard UI and session API endpoints
 - Session data accessed via EventLogger.load_all_sessions()
 
@@ -80,3 +81,17 @@ Format: Date, decision title, and brief explanation of the choice and rationale.
 - Main area shows all queries in a conversation sequentially, each with its own collapsible event timeline
 - Legacy sessions without conversation_id are treated as single-query conversations (backward compatible)
 - No emoji in UI — clean text and CSS only
+
+---
+
+## 2025-02-08: Dashboard Lifecycle
+
+**Decision**: Dashboard runs as a persistent background service, independent of chat sessions.
+
+**Details**:
+- `make dashboard` starts it (idempotent — safe to call multiple times)
+- `make stop` is the only way to kill it
+- `make chat` starts/stops chat sessions without affecting dashboard
+- `make start` is a convenience: ensures dashboard running, then starts chat
+- This allows running multiple chat sessions while keeping dashboard open for continuous observation
+- Tool events now show specific tool names (http_fetch, mock_api_fetch) instead of generic titles

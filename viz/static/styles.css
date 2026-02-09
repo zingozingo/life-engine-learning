@@ -444,7 +444,33 @@ body {
 .token-badge {
     font-family: 'SF Mono', Consolas, monospace;
     font-size: 0.75rem;
-    color: var(--accent-blue);
+    color: var(--accent-green);
+    font-weight: 600;
+}
+
+/* Composition events are context/preparation - no badges, lighter appearance */
+.event-node.composition .event-card {
+    opacity: 0.85;
+    border-style: dashed;
+    border-color: var(--border-color);
+}
+
+.event-node.composition .event-title {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.event-node.composition .event-what {
+    color: var(--text-muted);
+}
+
+.event-node.composition:hover .event-card {
+    opacity: 1;
+}
+
+/* Composition events have no stats area - description takes full width */
+.event-node.composition .event-stats {
+    flex-shrink: 1;
 }
 
 .duration-badge {

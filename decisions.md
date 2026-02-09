@@ -143,3 +143,48 @@ Format: Date, decision title, and brief explanation of the choice and rationale.
 **Rationale**: Pydantic AI's .all_messages() captures the full conversation including tool calls. This must be passed back as message_history parameter on subsequent calls. The engine returns the updated history so the chat loop can track it.
 
 **Impact**: engines/base.py return type is tuple[str, list]. All future engine levels must implement this pattern. Conversation history token count is now tracked in events for cost visibility.
+
+---
+
+## 2026-02-08: Token Role Classification
+
+**Decision**: Added `token_role` field to EngineEvent with three values: 'composition', 'actual', 'info'. Running totals only sum 'actual' events.
+
+**Context**: Dashboard was incorrectly summing all token counts (~6,312) when the real API cost was much lower (~3,211). Events like prompt_composed and tool_registered describe what goes INTO the LLM request, not separate API calls.
+
+**Rationale**:
+- **composition**: Tokens that become part of the LLM input (prompt, tools, skills). Already counted in llm_request.
+- **actual**: Real API usage (llm_request = input tokens, llm_response = output tokens). Sum these for cost.
+- **info**: Events with no token cost (tool_called execution, errors, classifier decisions).
+
+**Impact**:
+- shared/models.py: EngineEvent has token_role field, compute_total_tokens() filters by role
+- viz/events.py: Each log method sets appropriate token_role
+- viz/static/app.js: Running total (Σ) only sums 'actual' events, composition events styled dimmer
+- Backward compatible: legacy sessions without token_role default to 'actual'
+
+---
+
+## 2026-02-09: Token Role Display Refinement
+
+**Decision**: Composition events display NO badges and NO running totals. Token counts appear only in the description text (e.g., "~3,051 tokens of LLM input"). Only actual events (llm_request, llm_response) show +N badges and Σ running totals.
+
+**Context**: Initial implementation still showed +N badges on composition events, which looked additive and confused users. Showing "+3,051" on prompt_composed and "+3,073" on llm_request side-by-side implied they should sum to ~6,124 when the real cost was ~3,073.
+
+**Rationale**: The fix isn't about styling — it's about removing visual elements that imply addition. Composition events are context/preparation; actual events are the real cost. The llm_request one-liner now includes a breakdown: "(prompt: 3,051 + tools: 50 + message: ~22)" to show where input tokens come from.
+
+**Impact**: viz/static/app.js completely restructured token display. Dashboard now shows ~3,362 tokens per query instead of ~6,447.
+
+---
+
+## 2026-02-09: Server Restart After Code Changes
+
+**Decision**: Always run `make restart` (or `make stop && make dashboard`) after modifying backend Python files.
+
+**Context**: Spent debugging time when token_role was correctly saved to disk but missing from API responses. Root cause: the persistent uvicorn server kept old code in memory.
+
+**Rationale**: The dashboard runs as a persistent background service for good UX (survives chat session restarts). But Python doesn't hot-reload like JavaScript. Changes to models.py, events.py, server.py, or annotations.py require a server restart.
+
+**Symptom**: Data on disk is correct but API response is missing new fields or has old behavior.
+
+**Impact**: Added to mental checklist: after editing backend files, restart server before testing.

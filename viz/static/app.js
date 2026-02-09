@@ -93,11 +93,16 @@ function renderConversation() {
     emptyState.style.display = 'none';
     conversationContainer.style.display = 'block';
 
+    // Compute total actual tokens across all sessions
+    const totalActualTokens = currentSessions.reduce((sum, session) => {
+        return sum + computeActualTokens(session.events);
+    }, 0);
+
     // Update header
     document.getElementById('conversation-level').textContent = `L${currentConversation.level}`;
     document.getElementById('conversation-title').textContent = 'Conversation';
     document.getElementById('conversation-queries').textContent = currentConversation.query_count;
-    document.getElementById('conversation-tokens').textContent = currentConversation.total_tokens.toLocaleString();
+    document.getElementById('conversation-tokens').textContent = totalActualTokens.toLocaleString();
 
     const startTime = new Date(currentConversation.started_at);
     const endTime = currentConversation.ended_at ? new Date(currentConversation.ended_at) : null;
@@ -111,6 +116,9 @@ function renderConversation() {
             ? 'First message (no history)'
             : `Conversation history: ~${historyTokens.toLocaleString()} tokens`;
 
+        // Compute actual tokens (only from token_role === 'actual' events)
+        const actualTokens = computeActualTokens(session.events);
+
         return `
             <div class="query-section" data-query-index="${queryIndex}">
                 <div class="query-header" onclick="toggleQuery(${queryIndex})">
@@ -120,7 +128,7 @@ function renderConversation() {
                         <div class="query-history">${historyLabel}</div>
                     </div>
                     <div class="query-stats">
-                        <span class="query-token-badge">${session.total_tokens.toLocaleString()} tokens</span>
+                        <span class="query-token-badge">${actualTokens.toLocaleString()} tokens</span>
                         <span class="expand-icon">&#9660;</span>
                     </div>
                 </div>
@@ -132,6 +140,17 @@ function renderConversation() {
     }).join('');
 }
 
+// Compute total tokens from only 'actual' events (llm_request, llm_response)
+function computeActualTokens(events) {
+    return events.reduce((sum, event) => {
+        const role = event.token_role || 'actual';  // Legacy events default to 'actual'
+        if (role === 'actual' && event.token_count) {
+            return sum + event.token_count;
+        }
+        return sum;
+    }, 0);
+}
+
 // Render the event timeline for a query
 function renderTimeline(events) {
     let runningTokens = 0;
@@ -141,16 +160,31 @@ function renderTimeline(events) {
             ${events.map((event, index) => {
                 const annotation = event.annotation || {};
                 const decisionMaker = annotation.decision_maker || event.decision_by || 'code';
+                const tokenRole = event.token_role || 'actual';  // Default for legacy events
+                const isComposition = tokenRole === 'composition';
+                const isActual = tokenRole === 'actual';
 
-                if (event.token_count) {
+                // Only sum 'actual' events (real API usage)
+                if (event.token_count && isActual) {
                     runningTokens += event.token_count;
                 }
 
                 // Get specific title and description for this event
-                const { title, oneLiner } = getEventDisplay(event, annotation);
+                // Pass all events so llm_request can build breakdown from preceding composition events
+                const { title, oneLiner } = getEventDisplay(event, annotation, events, index);
+
+                // Token badge ONLY for actual events - composition events show tokens in description
+                const tokenBadge = (event.token_count && isActual)
+                    ? `<span class="token-badge">+${event.token_count.toLocaleString()}</span>`
+                    : '';
+
+                // Running total ONLY shown on actual events
+                const runningTotalDisplay = (isActual && runningTokens > 0)
+                    ? `<span class="running-total">Σ ${runningTokens.toLocaleString()}</span>`
+                    : '';
 
                 return `
-                    <div class="event-node" data-event-index="${index}">
+                    <div class="event-node ${isComposition ? 'composition' : ''}" data-event-index="${index}">
                         <div class="event-dot ${decisionMaker}"></div>
                         <div class="event-card">
                             <div class="event-header" onclick="toggleEvent(this)">
@@ -159,9 +193,9 @@ function renderTimeline(events) {
                                     <div class="event-what">${oneLiner}</div>
                                 </div>
                                 <div class="event-stats">
-                                    ${event.token_count ? `<span class="token-badge">+${event.token_count.toLocaleString()}</span>` : ''}
+                                    ${tokenBadge}
                                     ${event.duration_ms ? `<span class="duration-badge">${event.duration_ms}ms</span>` : ''}
-                                    ${runningTokens > 0 ? `<span class="running-total">S ${runningTokens.toLocaleString()}</span>` : ''}
+                                    ${runningTotalDisplay}
                                     <span class="expand-icon">&#9660;</span>
                                 </div>
                             </div>
@@ -179,7 +213,8 @@ function renderTimeline(events) {
 }
 
 // Get display title and one-liner description built from actual event data
-function getEventDisplay(event, annotation) {
+// events and currentIndex are passed so llm_request can build breakdown from preceding composition events
+function getEventDisplay(event, annotation, events = [], currentIndex = 0) {
     const eventType = event.event_type;
     const data = event.data || {};
 
@@ -190,7 +225,7 @@ function getEventDisplay(event, annotation) {
             const tokens = event.token_count || Math.round(chars / 4);
             return {
                 title: 'System Prompt Built',
-                oneLiner: `Loaded ${skills.length} skills: ${skills.join(', ')}. ${chars.toLocaleString()} chars (~${tokens.toLocaleString()} tokens).`
+                oneLiner: `Loaded ${skills.length} skills: ${skills.join(', ')}. ${chars.toLocaleString()} chars (~${tokens.toLocaleString()} tokens of LLM input).`
             };
         }
 
@@ -199,16 +234,29 @@ function getEventDisplay(event, annotation) {
             const tokens = event.token_count || 0;
             return {
                 title: `Tool Registered: ${toolName}`,
-                oneLiner: `${toolName} is now available. +${tokens} tokens for tool definition.`
+                oneLiner: `${toolName} available. ~${tokens} tokens of LLM input.`
+            };
+        }
+
+        case 'skill_loaded': {
+            const skillName = data.skill_name || 'unknown';
+            const tokens = event.token_count || 0;
+            return {
+                title: `Skill Loaded: ${skillName}`,
+                oneLiner: `${skillName} loaded. ~${tokens} tokens of LLM input.`
             };
         }
 
         case 'llm_request': {
             const model = data.model || 'unknown';
-            const tokens = event.token_count || 0;
+            const totalTokens = event.token_count || 0;
+
+            // Build breakdown from preceding composition events
+            const breakdown = buildTokenBreakdown(events, currentIndex, totalTokens);
+
             return {
                 title: 'Request Sent to LLM',
-                oneLiner: `Sent to ${model}. ~${tokens.toLocaleString()} input tokens.`
+                oneLiner: `Sent to ${model}. ~${totalTokens.toLocaleString()} input tokens ${breakdown}.`
             };
         }
 
@@ -238,7 +286,7 @@ function getEventDisplay(event, annotation) {
             const length = data.response_length || 0;
             return {
                 title: 'Response Generated',
-                oneLiner: `Generated ${tokens}-token response (${length.toLocaleString()} chars) in ${duration.toLocaleString()}ms.`
+                oneLiner: `Generated ${tokens.toLocaleString()}-token response (${length.toLocaleString()} chars) in ${duration.toLocaleString()}ms.`
             };
         }
 
@@ -256,6 +304,46 @@ function getEventDisplay(event, annotation) {
                 oneLiner: annotation.what || ''
             };
     }
+}
+
+// Build a token breakdown string for llm_request by analyzing preceding composition events
+function buildTokenBreakdown(events, llmRequestIndex, totalTokens) {
+    let promptTokens = 0;
+    let toolTokens = 0;
+    let skillTokens = 0;
+
+    // Look at all events before this llm_request
+    for (let i = 0; i < llmRequestIndex; i++) {
+        const e = events[i];
+        const role = e.token_role || 'actual';
+        if (role !== 'composition') continue;
+
+        const tokens = e.token_count || 0;
+        switch (e.event_type) {
+            case 'prompt_composed':
+                promptTokens += tokens;
+                break;
+            case 'tool_registered':
+                toolTokens += tokens;
+                break;
+            case 'skill_loaded':
+                skillTokens += tokens;
+                break;
+        }
+    }
+
+    const compositionTotal = promptTokens + toolTokens + skillTokens;
+    const messageTokens = Math.max(0, totalTokens - compositionTotal);
+
+    // Build breakdown parts
+    const parts = [];
+    if (promptTokens > 0) parts.push(`prompt: ${promptTokens.toLocaleString()}`);
+    if (toolTokens > 0) parts.push(`tools: ${toolTokens.toLocaleString()}`);
+    if (skillTokens > 0) parts.push(`skills: ${skillTokens.toLocaleString()}`);
+    if (messageTokens > 0) parts.push(`message: ~${messageTokens.toLocaleString()}`);
+
+    if (parts.length === 0) return '';
+    return `(${parts.join(' + ')})`;
 }
 
 // Render the DATA section (Level 1 expansion) - what actually happened

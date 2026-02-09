@@ -53,6 +53,10 @@ class EngineEvent(BaseModel):
     token_count: int | None = Field(
         default=None, description="Tokens involved in this event"
     )
+    token_role: str = Field(
+        default="actual",
+        description="Token classification: 'composition' (part of future API call), 'actual' (real API usage), 'info' (no token cost)",
+    )
     duration_ms: int | None = Field(
         default=None, description="How long this step took in milliseconds"
     )
@@ -94,8 +98,15 @@ class QuerySession(BaseModel):
     )
 
     def compute_total_tokens(self) -> int:
-        """Sum token_count from all events that have it."""
-        return sum(e.token_count or 0 for e in self.events)
+        """Sum token_count from events with token_role='actual' only.
+
+        Composition events (prompt_composed, tool_registered) describe what goes
+        INTO the API call. Actual events (llm_request, llm_response) represent
+        real API usage. Only actual events count toward the total.
+        """
+        return sum(
+            e.token_count or 0 for e in self.events if e.token_role == "actual"
+        )
 
 
 class SkillMetadata(BaseModel):

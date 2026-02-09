@@ -116,6 +116,7 @@ class EventLogger:
         decision_by: DecisionBy,
         data: dict,
         token_count: int | None = None,
+        token_role: str = "actual",
         duration_ms: int | None = None,
     ) -> EngineEvent:
         """Internal method to create and record an event.
@@ -126,6 +127,7 @@ class EventLogger:
             decision_by: Who made the decision (code or llm)
             data: Event-specific payload
             token_count: Optional token count
+            token_role: 'composition', 'actual', or 'info'
             duration_ms: Optional timing
 
         Returns:
@@ -141,6 +143,7 @@ class EventLogger:
             decision_by=decision_by,
             data=data,
             token_count=token_count,
+            token_role=token_role,
             duration_ms=duration_ms,
         )
         self._active_sessions[query_id].events.append(event)
@@ -155,7 +158,11 @@ class EventLogger:
         token_count: int,
         skills_included: list[str],
     ) -> EngineEvent:
-        """Log that the system prompt was built."""
+        """Log that the system prompt was built.
+
+        Token role is 'composition' because the prompt is part of what gets
+        sent to the LLM, not a separate API cost.
+        """
         return self._log(
             query_id,
             EventType.PROMPT_COMPOSED,
@@ -168,6 +175,7 @@ class EventLogger:
                 "skills_included": skills_included,
             },
             token_count=token_count,
+            token_role="composition",
         )
 
     def log_classifier_decision(
@@ -177,12 +185,16 @@ class EventLogger:
         confidence: float | None,
         duration_ms: int,
     ) -> EngineEvent:
-        """Log a query classification decision (L3+ only)."""
+        """Log a query classification decision (L3+ only).
+
+        Token role is 'info' - classifier runs locally, no API token cost.
+        """
         return self._log(
             query_id,
             EventType.CLASSIFIER_DECISION,
             DecisionBy.CODE,
             {"classification": classification, "confidence": confidence},
+            token_role="info",
             duration_ms=duration_ms,
         )
 
@@ -193,25 +205,34 @@ class EventLogger:
         decision_by: DecisionBy,
         token_count: int,
     ) -> EngineEvent:
-        """Log that a skill's instructions were loaded."""
+        """Log that a skill's instructions were loaded.
+
+        Token role is 'composition' - skill content becomes part of the prompt.
+        """
         return self._log(
             query_id,
             EventType.SKILL_LOADED,
             decision_by,
             {"skill_name": skill_name},
             token_count=token_count,
+            token_role="composition",
         )
 
     def log_tool_registered(
         self, query_id: str, tool_name: str, token_count: int
     ) -> EngineEvent:
-        """Log that a tool was made available to the LLM."""
+        """Log that a tool was made available to the LLM.
+
+        Token role is 'composition' - tool definitions are sent as part of the
+        API call, included in llm_request input tokens.
+        """
         return self._log(
             query_id,
             EventType.TOOL_REGISTERED,
             DecisionBy.CODE,
             {"tool_name": tool_name},
             token_count=token_count,
+            token_role="composition",
         )
 
     def log_proactive_fetch(
@@ -222,13 +243,18 @@ class EventLogger:
         token_count: int,
         duration_ms: int,
     ) -> EngineEvent:
-        """Log a proactive data fetch before LLM runs (L4+ only)."""
+        """Log a proactive data fetch before LLM runs (L4+ only).
+
+        Token role is 'composition' - fetched data is injected into context
+        before the LLM call.
+        """
         return self._log(
             query_id,
             EventType.PROACTIVE_FETCH,
             DecisionBy.CODE,
             {"source": source, "data_summary": data_summary},
             token_count=token_count,
+            token_role="composition",
             duration_ms=duration_ms,
         )
 
@@ -241,7 +267,11 @@ class EventLogger:
         decision_by: DecisionBy,
         duration_ms: int,
     ) -> EngineEvent:
-        """Log a tool invocation during generation."""
+        """Log a tool invocation during generation.
+
+        Token role is 'info' - tool execution time is logged but the token
+        cost is already accounted for in llm_request/response.
+        """
         return self._log(
             query_id,
             EventType.TOOL_CALLED,
@@ -253,19 +283,24 @@ class EventLogger:
                 if len(result_summary) > 200
                 else result_summary,
             },
+            token_role="info",
             duration_ms=duration_ms,
         )
 
     def log_llm_request(
         self, query_id: str, model: str, token_count: int
     ) -> EngineEvent:
-        """Log that a request was sent to the LLM."""
+        """Log that a request was sent to the LLM.
+
+        Token role is 'actual' - this represents real API input token usage.
+        """
         return self._log(
             query_id,
             EventType.LLM_REQUEST,
             DecisionBy.CODE,
             {"model": model},
             token_count=token_count,
+            token_role="actual",
         )
 
     def log_llm_response(
@@ -275,7 +310,10 @@ class EventLogger:
         token_count: int,
         duration_ms: int,
     ) -> EngineEvent:
-        """Log that a response was received from the LLM."""
+        """Log that a response was received from the LLM.
+
+        Token role is 'actual' - this represents real API output token usage.
+        """
         return self._log(
             query_id,
             EventType.LLM_RESPONSE,
@@ -287,18 +325,23 @@ class EventLogger:
                 "response_length": len(response_text),
             },
             token_count=token_count,
+            token_role="actual",
             duration_ms=duration_ms,
         )
 
     def log_error(
         self, query_id: str, error_message: str, detail: dict | None = None
     ) -> EngineEvent:
-        """Log an error that occurred during processing."""
+        """Log an error that occurred during processing.
+
+        Token role is 'info' - errors have no token cost.
+        """
         return self._log(
             query_id,
             EventType.ERROR,
             DecisionBy.CODE,
             {"error_message": error_message, "detail": detail or {}},
+            token_role="info",
         )
 
     # --- Session loading for dashboard ---

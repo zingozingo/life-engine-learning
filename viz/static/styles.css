@@ -809,3 +809,232 @@ body {
         white-space: normal;
     }
 }
+
+/* === API Call / Suitcase Visualization === */
+
+.api-call-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 1rem;
+    background: var(--bg-data);
+}
+
+.api-call-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.round-label {
+    font-weight: 600;
+    font-size: 0.95em;
+    color: var(--text-primary);
+}
+
+.model-label {
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 0.8em;
+    color: var(--text-muted);
+    background: var(--bg-secondary);
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+/* Suitcase - the input breakdown */
+.suitcase {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.suitcase-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 14px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.suitcase-title {
+    font-weight: 500;
+    font-size: 0.9em;
+    color: var(--text-primary);
+}
+
+.suitcase-total {
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 0.85em;
+    font-weight: 600;
+    color: var(--accent-blue);
+}
+
+.suitcase-contents {
+    padding: 8px 14px;
+}
+
+.suitcase-item {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 6px 0;
+    font-size: 0.85em;
+}
+
+.suitcase-item + .suitcase-item {
+    border-top: 1px dotted var(--border-color);
+}
+
+.suitcase-item .item-label {
+    flex: 1;
+    color: var(--text-secondary);
+    min-width: 150px;
+}
+
+.suitcase-item .item-tokens {
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 0.9em;
+    min-width: 80px;
+    text-align: right;
+}
+
+.suitcase-item .item-tokens.est {
+    color: var(--text-muted);
+}
+
+.suitcase-item .item-tokens.real {
+    color: var(--accent-green);
+    font-weight: 600;
+}
+
+.suitcase-item .item-note {
+    width: 100%;
+    font-size: 0.8em;
+    color: var(--text-muted);
+    font-style: italic;
+    padding-left: 0;
+}
+
+.suitcase-actual-total {
+    background: rgba(46, 204, 113, 0.08);
+    margin: 4px -14px -8px;
+    padding: 8px 14px !important;
+    border-top: 1px solid var(--border-color) !important;
+}
+
+/* API Response section */
+.api-response-section {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.api-response-section .response-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 14px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.api-response-section .response-title {
+    font-weight: 500;
+    font-size: 0.9em;
+    color: var(--text-primary);
+}
+
+.api-response-section .response-tokens {
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 0.85em;
+    font-weight: 600;
+    color: var(--accent-orange);
+}
+
+.tool-call-list {
+    padding: 8px 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.tool-call-chip {
+    background: rgba(255, 159, 67, 0.15);
+    color: var(--accent-orange);
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    font-family: 'SF Mono', Consolas, monospace;
+}
+
+.api-response-section .response-preview {
+    padding: 10px 14px;
+    font-size: 0.85em;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    max-height: 150px;
+    overflow-y: auto;
+    border-top: 1px solid var(--border-color);
+}
+
+/* Round cost summary */
+.round-cost-summary {
+    background: var(--bg-card);
+    border-radius: 6px;
+    padding: 8px 14px;
+}
+
+.cost-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85em;
+}
+
+.cost-label {
+    color: var(--text-muted);
+}
+
+.cost-value {
+    font-family: 'SF Mono', Consolas, monospace;
+    color: var(--text-secondary);
+}
+
+.cost-value strong {
+    color: var(--text-primary);
+}
+
+/* API call token badge in timeline */
+.token-badge.api-call-badge {
+    font-size: 0.7em;
+    white-space: nowrap;
+}
+
+/* Conversation history note */
+.history-note {
+    padding: 4px 8px;
+    font-size: 0.8em;
+    color: var(--accent-blue);
+    background: rgba(74, 158, 255, 0.08);
+    border-left: 2px solid var(--accent-blue);
+    border-radius: 0 4px 4px 0;
+    display: inline-block;
+}
+
+/* Make api_call events visually distinct */
+.event-node.api-call .event-card {
+    border-left: 3px solid var(--accent-blue);
+}
+
+.event-node.api-call .event-dot {
+    background: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.2);
+}

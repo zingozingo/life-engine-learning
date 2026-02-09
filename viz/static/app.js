@@ -112,12 +112,31 @@ function renderConversation() {
     // Render each query section
     queriesContainer.innerHTML = currentSessions.map((session, queryIndex) => {
         const historyTokens = session.conversation_history_tokens || 0;
-        const historyLabel = queryIndex === 0
-            ? 'First message (no history)'
-            : `Conversation history: ~${historyTokens.toLocaleString()} tokens`;
 
-        // Compute actual tokens (only from token_role === 'actual' events)
-        const actualTokens = computeActualTokens(session.events);
+        // Build history label
+        let historyHtml = '';
+        if (queryIndex === 0) {
+            historyHtml = '<div class="query-history">First message (no history)</div>';
+        } else if (historyTokens > 0) {
+            historyHtml = `<div class="history-note">Carrying ${historyTokens.toLocaleString()} tokens of conversation history</div>`;
+        } else {
+            historyHtml = `<div class="query-history">Query ${queryIndex + 1} in conversation</div>`;
+        }
+
+        // Build token summary - prefer new format with input/output split
+        const totalInput = session.total_input_tokens || 0;
+        const totalOutput = session.total_output_tokens || 0;
+        const totalCalls = session.total_api_calls || 0;
+        const totalTokens = totalInput + totalOutput;
+
+        let tokenSummary;
+        if (totalCalls > 0) {
+            tokenSummary = `${totalTokens.toLocaleString()} tokens (${totalCalls} call${totalCalls > 1 ? 's' : ''}: ${totalInput.toLocaleString()} in + ${totalOutput.toLocaleString()} out)`;
+        } else {
+            // Legacy format fallback
+            const actualTokens = computeActualTokens(session.events);
+            tokenSummary = `${actualTokens.toLocaleString()} tokens`;
+        }
 
         return `
             <div class="query-section" data-query-index="${queryIndex}">
@@ -125,10 +144,10 @@ function renderConversation() {
                     <div class="query-info">
                         <div class="query-number">Query ${queryIndex + 1}</div>
                         <div class="query-text">${escapeHtml(session.query_text)}</div>
-                        <div class="query-history">${historyLabel}</div>
+                        ${historyHtml}
                     </div>
                     <div class="query-stats">
-                        <span class="query-token-badge">${actualTokens.toLocaleString()} tokens</span>
+                        <span class="query-token-badge">${tokenSummary}</span>
                         <span class="expand-icon">&#9660;</span>
                     </div>
                 </div>
@@ -140,15 +159,19 @@ function renderConversation() {
     }).join('');
 }
 
-// Compute total tokens from only 'actual' events (llm_request, llm_response)
+// Compute total tokens from 'actual' events (api_call, or legacy llm_request/llm_response)
 function computeActualTokens(events) {
-    return events.reduce((sum, event) => {
-        const role = event.token_role || 'actual';  // Legacy events default to 'actual'
-        if (role === 'actual' && event.token_count) {
-            return sum + event.token_count;
+    let total = 0;
+    for (const event of events) {
+        if (event.event_type === 'api_call') {
+            // New format: tokens in data object
+            total += (event.data?.input_tokens || 0) + (event.data?.output_tokens || 0);
+        } else if (event.token_role === 'actual' && event.token_count) {
+            // Legacy format: tokens in token_count field
+            total += event.token_count;
         }
-        return sum;
-    }, 0);
+    }
+    return total;
 }
 
 // Render the event timeline for a query
@@ -163,28 +186,41 @@ function renderTimeline(events) {
                 const tokenRole = event.token_role || 'actual';  // Default for legacy events
                 const isComposition = tokenRole === 'composition';
                 const isActual = tokenRole === 'actual';
+                const isApiCall = event.event_type === 'api_call';
 
-                // Only sum 'actual' events (real API usage)
-                if (event.token_count && isActual) {
+                // Compute token badge and running total
+                let tokenBadge = '';
+                let runningTotalDisplay = '';
+
+                if (isApiCall) {
+                    // New format: api_call events
+                    const inputTokens = event.data?.input_tokens || 0;
+                    const outputTokens = event.data?.output_tokens || 0;
+                    const roundTokens = inputTokens + outputTokens;
+                    runningTokens += roundTokens;
+
+                    tokenBadge = `<span class="token-badge api-call-badge">+${inputTokens.toLocaleString()} in / +${outputTokens.toLocaleString()} out</span>`;
+                    runningTotalDisplay = `<span class="running-total">${runningTokens.toLocaleString()}</span>`;
+                } else if (event.token_count && isActual) {
+                    // Legacy format: llm_request/llm_response
                     runningTokens += event.token_count;
+                    tokenBadge = `<span class="token-badge">+${event.token_count.toLocaleString()}</span>`;
+                    runningTotalDisplay = `<span class="running-total">${runningTokens.toLocaleString()}</span>`;
                 }
 
                 // Get specific title and description for this event
                 // Pass all events so llm_request can build breakdown from preceding composition events
                 const { title, oneLiner } = getEventDisplay(event, annotation, events, index);
 
-                // Token badge ONLY for actual events - composition events show tokens in description
-                const tokenBadge = (event.token_count && isActual)
-                    ? `<span class="token-badge">+${event.token_count.toLocaleString()}</span>`
-                    : '';
-
-                // Running total ONLY shown on actual events
-                const runningTotalDisplay = (isActual && runningTokens > 0)
-                    ? `<span class="running-total">Σ ${runningTokens.toLocaleString()}</span>`
-                    : '';
+                // Determine event node classes
+                const nodeClasses = [
+                    'event-node',
+                    isComposition ? 'composition' : '',
+                    isApiCall ? 'api-call' : ''
+                ].filter(Boolean).join(' ');
 
                 return `
-                    <div class="event-node ${isComposition ? 'composition' : ''}" data-event-index="${index}">
+                    <div class="${nodeClasses}" data-event-index="${index}" data-event-type="${event.event_type}">
                         <div class="event-dot ${decisionMaker}"></div>
                         <div class="event-card">
                             <div class="event-header" onclick="toggleEvent(this)">
@@ -290,6 +326,30 @@ function getEventDisplay(event, annotation, events = [], currentIndex = 0) {
             };
         }
 
+        case 'api_call': {
+            const round = data.round_number;
+            const total = data.total_rounds || '?';
+            const input = data.input_tokens || 0;
+            const output = data.output_tokens || 0;
+            const type = data.response_type;
+            const tools = data.tool_calls?.join(', ') || '';
+
+            let title, oneLiner;
+            if (total === 1 && type === 'text') {
+                // Simple query, no tools — don't overcomplicate
+                title = 'API Call';
+                oneLiner = `${input.toLocaleString()} in + ${output.toLocaleString()} out`;
+            } else {
+                title = `API Round ${round} of ${total}`;
+                if (type === 'tool_call') {
+                    oneLiner = `${input.toLocaleString()} in + ${output.toLocaleString()} out · calls ${tools}`;
+                } else {
+                    oneLiner = `${input.toLocaleString()} in + ${output.toLocaleString()} out · final response`;
+                }
+            }
+            return { title, oneLiner };
+        }
+
         case 'error': {
             const msg = data.error_message || 'Unknown error';
             return {
@@ -356,6 +416,8 @@ function renderEventData(event) {
             return renderPromptData(event, data);
         case 'tool_registered':
             return renderToolRegisteredData(event, data);
+        case 'api_call':
+            return renderAPICallData(event);
         case 'llm_request':
             return renderLLMRequestData(event, data);
         case 'tool_called':
@@ -484,6 +546,99 @@ function renderLLMResponseData(event, data) {
             </div>
         </div>
     `;
+}
+
+// Render API_CALL event data - the suitcase visualization
+function renderAPICallData(event) {
+    const d = event.data || {};
+    const round = d.round_number || 1;
+    const total = d.total_rounds || '?';
+    const inputTokens = d.input_tokens || 0;
+    const outputTokens = d.output_tokens || 0;
+    const totalTokens = inputTokens + outputTokens;
+    const breakdown = d.input_breakdown || [];
+    const responseType = d.response_type || 'text';
+    const preview = d.response_preview || '';
+    const tools = d.tool_calls || [];
+    const model = d.model || 'unknown';
+
+    let html = '<div class="api-call-detail">';
+
+    // Header with round info and model
+    html += `<div class="api-call-header">`;
+    html += `<span class="round-label">Round ${round} of ${total}</span>`;
+    html += `<span class="model-label">${escapeHtml(model)}</span>`;
+    html += `</div>`;
+
+    // === INPUT SECTION (the suitcase) ===
+    html += `<div class="suitcase">`;
+    html += `<div class="suitcase-header">`;
+    html += `<span class="suitcase-title">Packed into this call</span>`;
+    html += `<span class="suitcase-total">${inputTokens.toLocaleString()} tokens</span>`;
+    html += `</div>`;
+
+    // Breakdown items
+    html += `<div class="suitcase-contents">`;
+    for (const item of breakdown) {
+        if (item.is_real) {
+            // This is the "ACTUAL TOTAL" line — render as the verified total
+            html += `<div class="suitcase-item suitcase-actual-total">`;
+            html += `<span class="item-label">${escapeHtml(item.label)}</span>`;
+            html += `<span class="item-tokens real">${item.tokens.toLocaleString()}</span>`;
+            html += `</div>`;
+        } else {
+            const tokStr = item.tokens_est != null
+                ? `~${item.tokens_est.toLocaleString()}`
+                : '';
+            html += `<div class="suitcase-item">`;
+            html += `<span class="item-label">${escapeHtml(item.label)}</span>`;
+            html += `<span class="item-tokens est">${tokStr}</span>`;
+            if (item.note) {
+                html += `<span class="item-note">${escapeHtml(item.note)}</span>`;
+            }
+            html += `</div>`;
+        }
+    }
+    html += `</div>`; // suitcase-contents
+    html += `</div>`; // suitcase
+
+    // === OUTPUT SECTION (what came back) ===
+    html += `<div class="api-response-section">`;
+    html += `<div class="response-header">`;
+    if (responseType === 'tool_call') {
+        html += `<span class="response-title">LLM decided to use tools</span>`;
+        html += `<span class="response-tokens">${outputTokens.toLocaleString()} tokens</span>`;
+    } else {
+        html += `<span class="response-title">LLM responded</span>`;
+        html += `<span class="response-tokens">${outputTokens.toLocaleString()} tokens</span>`;
+    }
+    html += `</div>`;
+
+    // Tool calls list
+    if (tools.length > 0) {
+        html += `<div class="tool-call-list">`;
+        tools.forEach(t => {
+            html += `<span class="tool-call-chip">${escapeHtml(t)}</span>`;
+        });
+        html += `</div>`;
+    }
+
+    // Response preview
+    if (preview) {
+        html += `<div class="response-preview">${escapeHtml(preview)}</div>`;
+    }
+    html += `</div>`; // api-response-section
+
+    // === COST SUMMARY for this round ===
+    html += `<div class="round-cost-summary">`;
+    html += `<div class="cost-row">`;
+    html += `<span class="cost-label">This round</span>`;
+    html += `<span class="cost-value">${inputTokens.toLocaleString()} in + ${outputTokens.toLocaleString()} out = <strong>${totalTokens.toLocaleString()}</strong></span>`;
+    html += `</div>`;
+    html += `</div>`;
+
+    html += `</div>`; // api-call-detail
+    return html;
 }
 
 function renderErrorData(event, data) {

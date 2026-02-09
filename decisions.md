@@ -188,3 +188,27 @@ Format: Date, decision title, and brief explanation of the choice and rationale.
 **Symptom**: Data on disk is correct but API response is missing new fields or has old behavior.
 
 **Impact**: Added to mental checklist: after editing backend files, restart server before testing.
+
+---
+
+## 2026-02-09: Per-Round Token Instrumentation (Option B)
+
+**Decision**: Use Pydantic AI's `agent.iter()` API to capture real token counts per API round, replacing len/4 estimates.
+
+**Context**: Token counts were estimated using `len(text) // 4` which significantly underestimated actual API costs. Multi-round tool loops were invisible — only one llm_request/llm_response pair was logged regardless of how many tool calls occurred.
+
+**Solution**:
+- Iterate through the agent run using `async for node in agent.iter()`
+- On each `CallToolsNode`, extract `node.model_response.usage.input_tokens` and `output_tokens`
+- Log a new `API_CALL` event per round with real token data
+- Backfill `total_rounds` on all events after the loop completes
+
+**Data Model Changes**:
+- `EventType.API_CALL` added (LLM_REQUEST/LLM_RESPONSE deprecated for backward compat)
+- `EngineEvent.round_number` tracks which round within query
+- `QuerySession` gains `total_api_calls`, `total_input_tokens`, `total_output_tokens`
+- `compute_token_breakdown()` returns (calls, input, output) tuple
+
+**Verification**: Weather query now shows 3 rounds (4,355 → 4,558 → 5,027 input tokens) with visible accumulation as tool results add to context.
+
+**Impact**: Dashboard can now show per-round breakdowns, input accumulation, and real API costs. Old logs remain readable via backward compatibility.

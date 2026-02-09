@@ -101,6 +101,12 @@ class EventLogger:
         """
         session = self._active_sessions.pop(query_id)
         session.ended_at = datetime.now(timezone.utc)
+
+        # Compute token totals from API_CALL events (new format)
+        api_calls, input_tokens, output_tokens = session.compute_token_breakdown()
+        session.total_api_calls = api_calls
+        session.total_input_tokens = input_tokens
+        session.total_output_tokens = output_tokens
         session.total_tokens = session.compute_total_tokens()
 
         # Write to disk
@@ -117,6 +123,7 @@ class EventLogger:
         data: dict,
         token_count: int | None = None,
         token_role: str = "actual",
+        round_number: int | None = None,
         duration_ms: int | None = None,
     ) -> EngineEvent:
         """Internal method to create and record an event.
@@ -128,6 +135,7 @@ class EventLogger:
             data: Event-specific payload
             token_count: Optional token count
             token_role: 'composition', 'actual', or 'info'
+            round_number: Which API round (1-indexed), for API_CALL events
             duration_ms: Optional timing
 
         Returns:
@@ -144,6 +152,7 @@ class EventLogger:
             data=data,
             token_count=token_count,
             token_role=token_role,
+            round_number=round_number,
             duration_ms=duration_ms,
         )
         self._active_sessions[query_id].events.append(event)
@@ -235,6 +244,65 @@ class EventLogger:
             token_role="composition",
         )
 
+    def log_api_call(
+        self,
+        query_id: str,
+        round_number: int,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+        response_type: str,
+        response_preview: str,
+        input_breakdown: list[dict] | None = None,
+        tool_calls: list[str] | None = None,
+        duration_ms: int | None = None,
+    ) -> EngineEvent:
+        """Log one complete API round-trip with REAL token counts from the API.
+
+        Args:
+            query_id: Which session this event belongs to
+            round_number: Which API round (1-indexed)
+            model: Model name (e.g., "claude-sonnet-4-5-20250929")
+            input_tokens: REAL input tokens from ModelResponse.usage
+            output_tokens: REAL output tokens from ModelResponse.usage
+            response_type: "tool_call" or "text"
+            response_preview: First ~300 chars of response for display
+            input_breakdown: Structural breakdown of input components (optional)
+            tool_calls: List of tool names if response_type == "tool_call"
+            duration_ms: How long this round took
+
+        Token role is 'actual' — this represents real API cost.
+        """
+        return self._log(
+            query_id,
+            EventType.API_CALL,
+            DecisionBy.CODE,
+            {
+                "round_number": round_number,
+                "model": model,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "input_breakdown": input_breakdown or [],
+                "response_type": response_type,
+                "response_preview": response_preview[:300] if len(response_preview) > 300 else response_preview,
+                "tool_calls": tool_calls or [],
+            },
+            token_count=input_tokens + output_tokens,
+            token_role="actual",
+            round_number=round_number,
+            duration_ms=duration_ms,
+        )
+
+    def backfill_total_rounds(self, query_id: str, total_rounds: int) -> None:
+        """After agent.iter() completes, update all API_CALL events with total_rounds.
+
+        This allows the dashboard to show "Round 2 of 3" instead of just "Round 2".
+        """
+        session = self._active_sessions[query_id]
+        for event in session.events:
+            if event.event_type == EventType.API_CALL:
+                event.data["total_rounds"] = total_rounds
+
     def log_proactive_fetch(
         self,
         query_id: str,
@@ -266,23 +334,32 @@ class EventLogger:
         result_summary: str,
         decision_by: DecisionBy,
         duration_ms: int,
+        result_tokens: int | None = None,
     ) -> EngineEvent:
         """Log a tool invocation during generation.
 
         Token role is 'info' - tool execution time is logged but the token
-        cost is already accounted for in llm_request/response.
+        cost is already accounted for in API_CALL events.
+
+        Args:
+            result_tokens: Estimated tokens the tool result adds to next round's input.
+                           This helps explain why round N+1 has more input tokens.
         """
+        data = {
+            "tool_name": tool_name,
+            "parameters": parameters,
+            "result_summary": result_summary[:200]
+            if len(result_summary) > 200
+            else result_summary,
+        }
+        if result_tokens is not None:
+            data["result_tokens"] = result_tokens
+
         return self._log(
             query_id,
             EventType.TOOL_CALLED,
             decision_by,
-            {
-                "tool_name": tool_name,
-                "parameters": parameters,
-                "result_summary": result_summary[:200]
-                if len(result_summary) > 200
-                else result_summary,
-            },
+            data,
             token_role="info",
             duration_ms=duration_ms,
         )

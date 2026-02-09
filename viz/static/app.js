@@ -152,7 +152,7 @@ function renderConversation() {
                     </div>
                 </div>
                 <div class="query-timeline">
-                    ${renderTimeline(session.events)}
+                    ${renderNarrativeTimeline(session.events, session)}
                 </div>
             </div>
         `;
@@ -725,6 +725,427 @@ function renderRawData(event) {
             <pre>${escapeHtml(JSON.stringify(event.data, null, 2))}</pre>
         </details>
     `;
+}
+
+// ============================================================
+// NARRATIVE TIMELINE - Step-by-step view with explanations
+// ============================================================
+
+// Render narrative timeline (new format) or fall back to legacy
+function renderNarrativeTimeline(events, session) {
+    const hasApiCalls = events.some(e => e.event_type === 'api_call');
+    if (!hasApiCalls) {
+        // Fall back to legacy rendering for old log files
+        return renderTimeline(events);
+    }
+
+    const steps = groupEventsIntoSteps(events);
+    let html = '<div class="narrative-timeline">';
+
+    for (const step of steps) {
+        html += renderNarrativeStep(step, session);
+    }
+
+    html += '</div>';
+    return html;
+}
+
+// Group flat events into narrative steps
+function groupEventsIntoSteps(events) {
+    const steps = [];
+
+    // Gather preparation events
+    const prepEvents = events.filter(e =>
+        ['prompt_composed', 'tool_registered', 'skill_loaded'].includes(e.event_type)
+    );
+
+    // Gather API calls in order
+    const apiCalls = events.filter(e => e.event_type === 'api_call')
+        .sort((a, b) => (a.data.round_number || 0) - (b.data.round_number || 0));
+
+    // Gather tool executions in order
+    const toolExecs = events.filter(e => e.event_type === 'tool_called');
+
+    // STEP 1: Preparation (always first)
+    if (prepEvents.length > 0) {
+        const promptEvent = prepEvents.find(e => e.event_type === 'prompt_composed');
+        const toolRegs = prepEvents.filter(e => e.event_type === 'tool_registered');
+        const skillLoads = prepEvents.filter(e => e.event_type === 'skill_loaded');
+
+        steps.push({
+            type: 'preparation',
+            stepNumber: 1,
+            events: prepEvents,
+            promptEvent,
+            toolRegs,
+            skillLoads,
+        });
+    }
+
+    // Interleave API calls and tool executions
+    let toolExecIndex = 0;
+    let stepNumber = 2;
+    let prevInputTokens = null;
+
+    for (let i = 0; i < apiCalls.length; i++) {
+        const apiCall = apiCalls[i];
+        const isLast = (i === apiCalls.length - 1);
+        const isFirst = (i === 0);
+        const inputGrowth = prevInputTokens ? (apiCall.data.input_tokens - prevInputTokens) : null;
+
+        // API Call step
+        steps.push({
+            type: 'api_call',
+            stepNumber: stepNumber++,
+            event: apiCall,
+            roundNumber: apiCall.data.round_number,
+            totalRounds: apiCall.data.total_rounds,
+            isFirst,
+            isLast,
+            inputGrowth,
+            prevInputTokens,
+        });
+
+        prevInputTokens = apiCall.data.input_tokens;
+
+        // If this API call triggered tools (not the last round), add tool execution step
+        if (!isLast && apiCall.data.response_type === 'tool_call') {
+            const toolNames = apiCall.data.tool_calls || [];
+            const matchedTools = [];
+            for (const name of toolNames) {
+                if (toolExecIndex < toolExecs.length) {
+                    matchedTools.push(toolExecs[toolExecIndex]);
+                    toolExecIndex++;
+                }
+            }
+
+            steps.push({
+                type: 'tool_execution',
+                stepNumber: stepNumber++,
+                events: matchedTools,
+                toolNames: toolNames,
+                resultTokensEst: matchedTools.reduce((sum, t) =>
+                    sum + (t.data?.result_tokens || 0), 0),
+            });
+        }
+    }
+
+    // FINAL: Total cost summary
+    const totalInput = apiCalls.reduce((sum, e) => sum + (e.data.input_tokens || 0), 0);
+    const totalOutput = apiCalls.reduce((sum, e) => sum + (e.data.output_tokens || 0), 0);
+    const totalCalls = apiCalls.length;
+
+    steps.push({
+        type: 'total_cost',
+        stepNumber: stepNumber,
+        totalInput,
+        totalOutput,
+        totalCalls,
+        totalTokens: totalInput + totalOutput,
+    });
+
+    return steps;
+}
+
+// Dispatch to step-specific renderer
+function renderNarrativeStep(step, session) {
+    switch (step.type) {
+        case 'preparation': return renderPreparationStep(step, session);
+        case 'api_call': return renderApiCallStep(step);
+        case 'tool_execution': return renderToolExecutionStep(step);
+        case 'total_cost': return renderTotalCostStep(step);
+        default: return '';
+    }
+}
+
+// STEP: Preparation - what was packed into the suitcase
+function renderPreparationStep(step, session) {
+    const prompt = step.promptEvent;
+    const skills = prompt?.data?.skills_included || [];
+    const skillCount = skills.length;
+    const skillList = skills.join(', ');
+    const promptTokens = prompt?.token_count || 0;
+    const toolRegs = step.toolRegs || [];
+    const toolNames = toolRegs.map(t => t.data?.tool_name).filter(Boolean);
+    const toolTokens = toolRegs.reduce((sum, t) => sum + (t.token_count || 0), 0);
+    const historyTokens = session?.conversation_history_tokens || 0;
+    const isFirstQuery = (session?.sequence || 1) === 1;
+
+    let html = '<div class="narrative-step preparation-step">';
+    html += `<div class="step-header">`;
+    html += `<span class="step-number">STEP ${step.stepNumber}</span>`;
+    html += `<span class="step-title">Preparation</span>`;
+    html += `</div>`;
+
+    html += `<div class="step-explanation">`;
+    html += `<p>Your code packed a suitcase with everything Claude might need:</p>`;
+    html += `<div class="pack-list">`;
+
+    // Skills
+    html += `<div class="pack-item">`;
+    html += `<span class="pack-icon">📚</span>`;
+    html += `<div class="pack-detail">`;
+    html += `<span class="pack-label">${skillCount} skill instruction${skillCount !== 1 ? 's' : ''}</span>`;
+    html += `<span class="pack-desc">${skillList}</span>`;
+    html += `<span class="pack-tokens">~${promptTokens.toLocaleString()} tokens</span>`;
+    html += `</div>`;
+    html += `</div>`;
+
+    // Tools
+    if (toolNames.length > 0) {
+        html += `<div class="pack-item">`;
+        html += `<span class="pack-icon">🔧</span>`;
+        html += `<div class="pack-detail">`;
+        html += `<span class="pack-label">${toolNames.length} tool definition${toolNames.length > 1 ? 's' : ''}</span>`;
+        html += `<span class="pack-desc">${toolNames.join(', ')}</span>`;
+        html += `<span class="pack-tokens">~${toolTokens.toLocaleString()} tokens</span>`;
+        html += `</div>`;
+        html += `</div>`;
+    }
+
+    // Conversation history (if Query 2+)
+    if (!isFirstQuery && historyTokens > 0) {
+        html += `<div class="pack-item history-item">`;
+        html += `<span class="pack-icon">📜</span>`;
+        html += `<div class="pack-detail">`;
+        html += `<span class="pack-label">Conversation history</span>`;
+        html += `<span class="pack-desc">Everything from earlier queries gets re-sent every time</span>`;
+        html += `<span class="pack-tokens">~${historyTokens.toLocaleString()} tokens</span>`;
+        html += `</div>`;
+        html += `</div>`;
+    }
+
+    // User's question
+    html += `<div class="pack-item">`;
+    html += `<span class="pack-icon">💬</span>`;
+    html += `<div class="pack-detail">`;
+    html += `<span class="pack-label">Your question</span>`;
+    html += `<span class="pack-desc">"${escapeHtml((session?.query_text || '').substring(0, 80))}${(session?.query_text?.length || 0) > 80 ? '...' : ''}"</span>`;
+    html += `</div>`;
+    html += `</div>`;
+
+    html += `</div>`; // pack-list
+
+    // Monolith tax callout
+    html += `<div class="insight-callout">`;
+    html += `<strong>Level 1 monolith tax:</strong> All ${skillCount} skills are loaded into every query, even if only one is needed. `;
+    html += `Level 2 will improve this — loading only relevant skills on demand.`;
+    html += `</div>`;
+
+    html += `</div>`; // step-explanation
+    html += `</div>`; // narrative-step
+
+    return html;
+}
+
+// STEP: API Call - one round-trip to Claude
+function renderApiCallStep(step) {
+    const d = step.event.data;
+    const inputTokens = d.input_tokens || 0;
+    const outputTokens = d.output_tokens || 0;
+    const totalRounds = d.total_rounds || 1;
+    const isToolCall = d.response_type === 'tool_call';
+    const tools = d.tool_calls || [];
+    const preview = d.response_preview || '';
+    const duration = step.event.duration_ms;
+
+    // Determine the narrative
+    let stepTitle, explanation;
+
+    if (totalRounds === 1) {
+        stepTitle = 'Sent to Claude';
+        explanation = `Claude received the suitcase (${inputTokens.toLocaleString()} tokens), read everything, and responded directly.`;
+    } else if (step.isFirst && isToolCall) {
+        stepTitle = `Sent to Claude (Round ${step.roundNumber} of ${totalRounds})`;
+        explanation = `Claude received the suitcase (${inputTokens.toLocaleString()} tokens), read everything, and decided it needs more data before answering.`;
+    } else if (!step.isLast && isToolCall) {
+        stepTitle = `Sent to Claude again (Round ${step.roundNumber} of ${totalRounds})`;
+        let growthNote = '';
+        if (step.inputGrowth) {
+            growthNote = ` Input grew from ${step.prevInputTokens.toLocaleString()} → ${inputTokens.toLocaleString()} (+${step.inputGrowth.toLocaleString()}) because the tool result was added.`;
+        }
+        explanation = `Claude received the updated suitcase with previous tool results.${growthNote} Claude decided it needs even more data.`;
+    } else {
+        stepTitle = totalRounds > 1
+            ? `Sent to Claude again (Round ${step.roundNumber} of ${totalRounds})`
+            : 'Sent to Claude';
+        let growthNote = '';
+        if (step.inputGrowth) {
+            growthNote = ` Input grew from ${step.prevInputTokens.toLocaleString()} → ${inputTokens.toLocaleString()} (+${step.inputGrowth.toLocaleString()}) because tool results were added.`;
+        }
+        explanation = `Claude received the final suitcase with all tool results.${growthNote} Claude wrote the response.`;
+    }
+
+    let html = '<div class="narrative-step api-call-step">';
+    html += `<div class="step-header">`;
+    html += `<span class="step-number">STEP ${step.stepNumber}</span>`;
+    html += `<span class="step-title">${stepTitle}</span>`;
+    if (duration) {
+        html += `<span class="step-duration">${(duration / 1000).toFixed(1)}s</span>`;
+    }
+    html += `</div>`;
+
+    html += `<div class="step-explanation">`;
+    html += `<p>${explanation}</p>`;
+
+    // Cost box
+    html += `<div class="cost-box">`;
+    html += `<div class="cost-line">`;
+    html += `<span class="cost-direction">Sent to Claude</span>`;
+    html += `<span class="cost-amount">${inputTokens.toLocaleString()} tokens</span>`;
+    html += `</div>`;
+    html += `<div class="cost-line">`;
+    html += `<span class="cost-direction">${isToolCall ? "Claude's decision" : "Claude's response"}</span>`;
+    html += `<span class="cost-amount">${outputTokens.toLocaleString()} tokens</span>`;
+    html += `</div>`;
+    html += `<div class="cost-line cost-subtotal">`;
+    html += `<span class="cost-direction">Round subtotal</span>`;
+    html += `<span class="cost-amount">${(inputTokens + outputTokens).toLocaleString()} tokens</span>`;
+    html += `</div>`;
+    html += `</div>`; // cost-box
+
+    // What Claude did
+    if (isToolCall && tools.length > 0) {
+        html += `<div class="claude-action tool-action">`;
+        html += `<strong>Claude decided:</strong> "I need to call `;
+        html += tools.map(t => `<code>${escapeHtml(t)}</code>`).join(' and ');
+        html += ` to get the data I need."`;
+        html += `</div>`;
+    } else if (preview) {
+        html += `<div class="claude-action text-action">`;
+        html += `<strong>Claude responded:</strong>`;
+        html += `<div class="claude-preview">${escapeHtml(preview.substring(0, 300))}${preview.length > 300 ? '...' : ''}</div>`;
+        html += `</div>`;
+    }
+
+    // Expandable: raw suitcase breakdown
+    const breakdown = d.input_breakdown || [];
+    if (breakdown.length > 0) {
+        html += `<details class="breakdown-details">`;
+        html += `<summary>View suitcase contents breakdown</summary>`;
+        html += `<div class="suitcase-contents">`;
+        for (const item of breakdown) {
+            if (item.is_real) {
+                html += `<div class="suitcase-item suitcase-actual-total">`;
+                html += `<span class="item-label">✓ Verified total from API</span>`;
+                html += `<span class="item-tokens real">${item.tokens.toLocaleString()}</span>`;
+                html += `</div>`;
+            } else {
+                const tokStr = item.tokens_est != null ? `~${item.tokens_est.toLocaleString()}` : '—';
+                html += `<div class="suitcase-item">`;
+                html += `<span class="item-label">${escapeHtml(item.label)}</span>`;
+                html += `<span class="item-tokens est">${tokStr}</span>`;
+                html += `</div>`;
+            }
+        }
+        html += `</div>`;
+        html += `</details>`;
+    }
+
+    html += `</div>`; // step-explanation
+    html += `</div>`; // narrative-step
+
+    return html;
+}
+
+// STEP: Tool Execution - your code ran the tool
+function renderToolExecutionStep(step) {
+    const events = step.events || [];
+
+    let html = '<div class="narrative-step tool-step">';
+    html += `<div class="step-header">`;
+    html += `<span class="step-number">STEP ${step.stepNumber}</span>`;
+    html += `<span class="step-title">Your code ran the tool</span>`;
+    html += `</div>`;
+
+    html += `<div class="step-explanation">`;
+    html += `<p>Claude can't fetch data itself — it asks your code to do it. Your code executed the tool and got results back.</p>`;
+
+    for (const toolEvent of events) {
+        const td = toolEvent.data || {};
+        const name = td.tool_name || 'unknown';
+        const params = td.parameters || {};
+        const result = td.result_summary || '';
+        const resultTokens = td.result_tokens;
+        const dur = toolEvent.duration_ms;
+
+        html += `<div class="tool-exec-card">`;
+        html += `<div class="tool-exec-name"><code>${escapeHtml(name)}</code>`;
+        if (dur != null) html += `<span class="tool-exec-duration">${dur}ms</span>`;
+        html += `</div>`;
+
+        // Parameters
+        if (Object.keys(params).length > 0) {
+            html += `<div class="tool-exec-params">`;
+            for (const [key, val] of Object.entries(params)) {
+                html += `<span class="param-pair"><em>${escapeHtml(key)}:</em> ${escapeHtml(String(val).substring(0, 80))}</span>`;
+            }
+            html += `</div>`;
+        }
+
+        // Result preview
+        if (result) {
+            html += `<div class="tool-exec-result">`;
+            html += `<span class="result-label">Returned:</span> ${escapeHtml(result.substring(0, 200))}`;
+            html += `</div>`;
+        }
+
+        // Token impact
+        if (resultTokens) {
+            html += `<div class="tool-token-impact">`;
+            html += `This result adds ~${resultTokens.toLocaleString()} tokens to the next suitcase.`;
+            html += `</div>`;
+        }
+
+        html += `</div>`; // tool-exec-card
+    }
+
+    html += `</div>`; // step-explanation
+    html += `</div>`; // narrative-step
+
+    return html;
+}
+
+// STEP: Total Cost Summary
+function renderTotalCostStep(step) {
+    let html = '<div class="narrative-step total-cost-step">';
+    html += `<div class="step-header">`;
+    html += `<span class="step-title">Total Cost</span>`;
+    html += `</div>`;
+
+    html += `<div class="total-cost-box">`;
+    html += `<div class="total-cost-main">`;
+    html += `<span class="total-number">${step.totalTokens.toLocaleString()}</span>`;
+    html += `<span class="total-label">tokens</span>`;
+    html += `</div>`;
+
+    html += `<div class="total-cost-breakdown">`;
+    html += `<div class="total-line">`;
+    html += `<span>${step.totalCalls} API call${step.totalCalls > 1 ? 's' : ''}</span>`;
+    html += `</div>`;
+    html += `<div class="total-line">`;
+    html += `<span>Sent to Claude: ${step.totalInput.toLocaleString()} tokens</span>`;
+    html += `</div>`;
+    html += `<div class="total-line">`;
+    html += `<span>Claude's responses: ${step.totalOutput.toLocaleString()} tokens</span>`;
+    html += `</div>`;
+    html += `</div>`;
+
+    // Insight about where cost lives
+    if (step.totalInput > 0 && step.totalOutput > 0) {
+        const inputPct = Math.round((step.totalInput / step.totalTokens) * 100);
+        html += `<div class="insight-callout">`;
+        html += `<strong>${inputPct}% of the cost</strong> is sending data TO Claude, not Claude's response. `;
+        if (step.totalCalls > 1) {
+            html += `With ${step.totalCalls} rounds, the system prompt and history were re-sent ${step.totalCalls} times.`;
+        }
+        html += `</div>`;
+    }
+
+    html += `</div>`; // total-cost-box
+    html += `</div>`; // narrative-step
+
+    return html;
 }
 
 // Toggle query expansion

@@ -959,8 +959,7 @@ function renderPreparationStep(step, session) {
     html += `<div class="pack-list">`;
 
     // Skills (measured - no tilde)
-    html += `<div class="pack-item">`;
-    html += `<span class="pack-icon">📚</span>`;
+    html += `<div class="pack-item pack-item-skills">`;
     html += `<div class="pack-detail">`;
     html += `<span class="pack-label">${skillCount} skill instruction${skillCount !== 1 ? 's' : ''}</span>`;
     html += `<span class="pack-desc">${skillList}</span>`;
@@ -970,8 +969,7 @@ function renderPreparationStep(step, session) {
 
     // Tools (measured - no tilde)
     if (toolNames.length > 0) {
-        html += `<div class="pack-item">`;
-        html += `<span class="pack-icon">🔧</span>`;
+        html += `<div class="pack-item pack-item-tools">`;
         html += `<div class="pack-detail">`;
         html += `<span class="pack-label">${toolNames.length} tool definition${toolNames.length > 1 ? 's' : ''}</span>`;
         html += `<span class="pack-desc">${toolNames.join(', ')}</span>`;
@@ -982,8 +980,7 @@ function renderPreparationStep(step, session) {
 
     // Conversation history (from breakdown - computed, no tilde)
     if (historyTokens > 0) {
-        html += `<div class="pack-item history-item">`;
-        html += `<span class="pack-icon">📜</span>`;
+        html += `<div class="pack-item pack-item-history">`;
         html += `<div class="pack-detail">`;
         html += `<span class="pack-label">Conversation history</span>`;
         html += `<span class="pack-desc">All prior messages, tool calls, and results re-sent</span>`;
@@ -993,8 +990,7 @@ function renderPreparationStep(step, session) {
     }
 
     // User's question (from breakdown - computed, no tilde)
-    html += `<div class="pack-item">`;
-    html += `<span class="pack-icon">💬</span>`;
+    html += `<div class="pack-item pack-item-question">`;
     html += `<div class="pack-detail">`;
     html += `<span class="pack-label">Your question</span>`;
     html += `<span class="pack-desc">"${escapeHtml((session?.query_text || '').substring(0, 80))}${(session?.query_text?.length || 0) > 80 ? '...' : ''}"</span>`;
@@ -1200,7 +1196,7 @@ function renderToolExecutionStep(step) {
     // Only show if there's a next API call to compare against
     if (step.realGrowthTokens != null && step.realGrowthTokens > 0) {
         html += `<div class="tool-growth-summary">`;
-        html += `<span class="growth-icon">📦</span> `;
+        html += ``;
         if (toolCount === 1) {
             html += `This tool call added <strong>${step.realGrowthTokens.toLocaleString()} tokens</strong> to the next suitcase.`;
         } else {

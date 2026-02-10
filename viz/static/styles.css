@@ -1157,16 +1157,30 @@ body {
     border: 1px solid var(--border-color);
 }
 
-.pack-item.history-item {
+.pack-item.history-item,
+.pack-item.pack-item-history {
     border-color: var(--accent-blue);
     background: rgba(74, 158, 255, 0.05);
 }
 
-.pack-icon {
-    font-size: 1.1em;
-    margin-top: 2px;
-    flex-shrink: 0;
+/* Pack item type indicators via left border color */
+.pack-item.pack-item-skills {
+    border-left: 3px solid var(--accent-purple);
 }
+
+.pack-item.pack-item-tools {
+    border-left: 3px solid var(--accent-teal);
+}
+
+.pack-item.pack-item-history {
+    border-left: 3px solid var(--accent-blue);
+}
+
+.pack-item.pack-item-question {
+    border-left: 3px solid var(--accent-green);
+}
+
+/* pack-icon removed - using border colors instead of emoji icons */
 
 .pack-detail {
     display: flex;
@@ -1407,9 +1421,7 @@ body {
     font-weight: 600;
 }
 
-.tool-growth-summary .growth-icon {
-    margin-right: 4px;
-}
+/* growth-icon removed - using plain text instead of emoji */
 
 /* Total cost step */
 .total-cost-step {

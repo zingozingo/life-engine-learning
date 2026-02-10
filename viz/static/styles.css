@@ -939,6 +939,15 @@ body {
     font-size: 0.75em;
 }
 
+.suitcase-item .item-source {
+    width: 100%;
+    font-size: 0.7em;
+    color: var(--text-muted);
+    opacity: 0.7;
+    font-family: 'SF Mono', Consolas, monospace;
+    padding-left: 0;
+}
+
 /* Row styling by measurement type */
 .suitcase-measured {
     background: rgba(255, 255, 255, 0.02);

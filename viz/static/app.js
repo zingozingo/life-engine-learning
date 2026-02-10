@@ -597,6 +597,9 @@ function renderAPICallData(event) {
             if (item.note) {
                 html += `<span class="item-note">${escapeHtml(item.note)}</span>`;
             }
+            if (item.source) {
+                html += `<span class="item-source">${escapeHtml(item.source)}</span>`;
+            }
             html += `</div>`;
         } else if (item.is_computed) {
             // COMPUTED = total - known (exact, derived from real values)
@@ -605,6 +608,9 @@ function renderAPICallData(event) {
             html += `<span class="item-tokens token-computed">${tokenVal.toLocaleString()}</span>`;
             if (item.note) {
                 html += `<span class="item-note item-note-dim">${escapeHtml(item.note)}</span>`;
+            }
+            if (item.source) {
+                html += `<span class="item-source">${escapeHtml(item.source)}</span>`;
             }
             html += `</div>`;
         } else {
@@ -890,23 +896,24 @@ function renderPreparationStep(step, session) {
     const toolRegs = step.toolRegs || [];
     const toolNames = toolRegs.map(t => t.data?.tool_name).filter(Boolean);
     const toolTokens = toolRegs.reduce((sum, t) => sum + (t.token_count || 0), 0);
-    const historyTokens = session?.conversation_history_tokens || 0;
-    const isFirstQuery = (session?.sequence || 1) === 1;
 
-    // Extract user message tokens from first API call breakdown
-    let userMsgTokens = null;
+    // Extract tokens from first API call breakdown (real computed values)
     const firstApiCall = step.firstApiCall;
-    if (firstApiCall && firstApiCall.data?.input_breakdown) {
-        // Find the computed "User message" or similar entry
-        const questionItem = firstApiCall.data.input_breakdown.find(item =>
-            item.is_computed && item.label &&
-            (item.label.toLowerCase().includes('user message') ||
-             item.label.toLowerCase().includes('your question'))
-        );
-        if (questionItem && questionItem.tokens != null) {
-            userMsgTokens = questionItem.tokens;
-        }
-    }
+    const breakdown = firstApiCall?.data?.input_breakdown || [];
+
+    // Find history item from breakdown (if present)
+    const historyItem = breakdown.find(item =>
+        item.label && item.label.toLowerCase().includes('conversation history') &&
+        !item.is_metadata
+    );
+    const historyTokens = historyItem?.tokens || 0;
+
+    // Find user question item from breakdown
+    const questionItem = breakdown.find(item =>
+        item.label && item.label.toLowerCase().includes('your question') &&
+        !item.is_metadata
+    );
+    const userMsgTokens = questionItem?.tokens;
 
     let html = '<div class="narrative-step preparation-step">';
     html += `<div class="step-header">`;
@@ -918,41 +925,41 @@ function renderPreparationStep(step, session) {
     html += `<p>Your code packed a suitcase with everything Claude might need:</p>`;
     html += `<div class="pack-list">`;
 
-    // Skills
+    // Skills (measured - no tilde)
     html += `<div class="pack-item">`;
     html += `<span class="pack-icon">📚</span>`;
     html += `<div class="pack-detail">`;
     html += `<span class="pack-label">${skillCount} skill instruction${skillCount !== 1 ? 's' : ''}</span>`;
     html += `<span class="pack-desc">${skillList}</span>`;
-    html += `<span class="pack-tokens">~${promptTokens.toLocaleString()} tokens</span>`;
+    html += `<span class="pack-tokens">${promptTokens.toLocaleString()} tokens</span>`;
     html += `</div>`;
     html += `</div>`;
 
-    // Tools
+    // Tools (measured - no tilde)
     if (toolNames.length > 0) {
         html += `<div class="pack-item">`;
         html += `<span class="pack-icon">🔧</span>`;
         html += `<div class="pack-detail">`;
         html += `<span class="pack-label">${toolNames.length} tool definition${toolNames.length > 1 ? 's' : ''}</span>`;
         html += `<span class="pack-desc">${toolNames.join(', ')}</span>`;
-        html += `<span class="pack-tokens">~${toolTokens.toLocaleString()} tokens</span>`;
+        html += `<span class="pack-tokens">${toolTokens.toLocaleString()} tokens</span>`;
         html += `</div>`;
         html += `</div>`;
     }
 
-    // Conversation history (if Query 2+)
-    if (!isFirstQuery && historyTokens > 0) {
+    // Conversation history (from breakdown - computed, no tilde)
+    if (historyTokens > 0) {
         html += `<div class="pack-item history-item">`;
         html += `<span class="pack-icon">📜</span>`;
         html += `<div class="pack-detail">`;
         html += `<span class="pack-label">Conversation history</span>`;
-        html += `<span class="pack-desc">Everything from earlier queries gets re-sent every time</span>`;
-        html += `<span class="pack-tokens">~${historyTokens.toLocaleString()} tokens</span>`;
+        html += `<span class="pack-desc">All prior messages, tool calls, and results re-sent</span>`;
+        html += `<span class="pack-tokens">${historyTokens.toLocaleString()} tokens</span>`;
         html += `</div>`;
         html += `</div>`;
     }
 
-    // User's question
+    // User's question (from breakdown - computed, no tilde)
     html += `<div class="pack-item">`;
     html += `<span class="pack-icon">💬</span>`;
     html += `<div class="pack-detail">`;
@@ -1071,16 +1078,25 @@ function renderApiCallStep(step) {
                 html += `<div class="suitcase-item suitcase-actual-total">`;
                 html += `<span class="item-label">Verified total from API</span>`;
                 html += `<span class="item-tokens token-real">${tokenVal.toLocaleString()}</span>`;
+                if (item.source) {
+                    html += `<span class="item-source">${escapeHtml(item.source)}</span>`;
+                }
                 html += `</div>`;
             } else if (item.is_measured) {
                 html += `<div class="suitcase-item suitcase-measured">`;
                 html += `<span class="item-label">${escapeHtml(item.label)}</span>`;
                 html += `<span class="item-tokens token-measured">${tokenVal.toLocaleString()}</span>`;
+                if (item.source) {
+                    html += `<span class="item-source">${escapeHtml(item.source)}</span>`;
+                }
                 html += `</div>`;
             } else if (item.is_computed) {
                 html += `<div class="suitcase-item suitcase-computed">`;
                 html += `<span class="item-label">${escapeHtml(item.label)}</span>`;
                 html += `<span class="item-tokens token-computed">${tokenVal.toLocaleString()}</span>`;
+                if (item.source) {
+                    html += `<span class="item-source">${escapeHtml(item.source)}</span>`;
+                }
                 html += `</div>`;
             } else {
                 const tokStr = tokenVal != null ? `~${tokenVal.toLocaleString()}` : '—';

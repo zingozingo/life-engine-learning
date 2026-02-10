@@ -41,11 +41,14 @@ def verify_session(filepath):
             print("  Breakdown:")
             for item in breakdown:
                 label = item.get("label", "?")
+                tokens = item.get("tokens", item.get("tokens_est", 0)) or 0
                 if item.get("is_real"):
-                    verified_total = item.get("tokens", 0)
+                    verified_total = tokens
                     print(f"    [=] {label}: {verified_total:,} (verified)")
+                elif item.get("is_metadata"):
+                    # Metadata items (like clean_call verification) don't count towards sum
+                    print(f"    [~] {label}: {tokens:,}")
                 else:
-                    tokens = item.get("tokens", item.get("tokens_est", 0)) or 0
                     items_sum += tokens
                     marker = (
                         "M"
@@ -79,6 +82,90 @@ def verify_session(filepath):
 
     if not input_match or not output_match:
         all_pass = False
+
+    # Verify breakdown split
+    print(f"\n  Breakdown split check:")
+    split_pass = verify_breakdown_split(session)
+    if not split_pass:
+        all_pass = False
+
+    return all_pass
+
+
+def verify_breakdown_split(session):
+    """Verify that breakdown items correctly split history and user question.
+
+    For Round 1:
+    - If has history: prompt + tools + history + question = verified total
+    - If no history: prompt + tools + question = verified total
+
+    For Round 2+:
+    - prompt + tools + [history] + question + tool_exchanges = verified total
+    """
+    api_calls = [e for e in session["events"] if e["event_type"] == "api_call"]
+    if not api_calls:
+        return True  # No API calls to verify
+
+    all_pass = True
+    seq = session.get("sequence", 1)
+
+    for call in api_calls:
+        d = call["data"]
+        round_num = d["round_number"]
+        breakdown = d.get("input_breakdown", [])
+
+        if not breakdown:
+            continue
+
+        # Extract components
+        verified_total = 0
+        computed_sum = 0
+        has_history = False
+        has_question = False
+        clean_call = None
+
+        for item in breakdown:
+            tokens = item.get("tokens", item.get("tokens_est", 0)) or 0
+            label = item.get("label", "").lower()
+
+            if item.get("is_real"):
+                verified_total = tokens
+            elif item.get("is_metadata"):
+                if "clean call" in label:
+                    clean_call = tokens
+            else:
+                computed_sum += tokens
+                if "conversation history" in label:
+                    has_history = True
+                if "your question" in label:
+                    has_question = True
+
+        # Verify sum
+        diff = computed_sum - verified_total
+        if diff != 0:
+            print(f"    [FAIL] Round {round_num}: breakdown sum={computed_sum:,} != verified={verified_total:,} (off by {diff:+,})")
+            all_pass = False
+        else:
+            print(f"    [PASS] Round {round_num}: breakdown sum={computed_sum:,} = verified={verified_total:,}")
+
+        # Verify split logic
+        if round_num == 1:
+            if seq == 1:
+                # First query in conversation should NOT have history
+                if has_history:
+                    print(f"    [WARN] seq=1 Round 1 should not have history component")
+            else:
+                # Subsequent queries SHOULD have history
+                if not has_history:
+                    print(f"    [WARN] seq={seq} Round 1 should have history component")
+
+            if not has_question:
+                print(f"    [WARN] Round 1 should have 'Your question' component")
+
+            # Verify clean_call matches verified (for seq=1 only, since no history)
+            if seq == 1 and clean_call is not None:
+                if clean_call != verified_total:
+                    print(f"    [INFO] clean_call={clean_call:,} != verified={verified_total:,} (expected for seq>1)")
 
     return all_pass
 

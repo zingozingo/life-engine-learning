@@ -156,6 +156,28 @@ class Level1Monolith(BaseEngine):
         # This includes 1 token for "x" plus base overhead
         return result.input_tokens - 1
 
+    def _count_clean_call_tokens(self, user_message: str) -> int | None:
+        """Count exact tokens for this query WITHOUT conversation history.
+
+        Returns the total input tokens if this were a fresh Round 1 call
+        with just the system prompt, tools, and this user message.
+        One API call (~150ms) per query.
+
+        Returns None if the API call fails (caller must handle gracefully).
+        """
+        try:
+            tool_defs = self._get_tool_definitions()
+            result = self._client.messages.count_tokens(
+                model=self._model,
+                system=self.system_prompt,
+                tools=tool_defs if tool_defs else None,
+                messages=[{"role": "user", "content": user_message}],
+            )
+            return result.input_tokens
+        except Exception as e:
+            print(f"Warning: per-query count_tokens failed: {e}")
+            return None  # Caller must handle None — do NOT fall back to estimate
+
     async def run(self, user_message: str, message_history: list) -> tuple[str, list]:
         """Process a user message and return a response.
 
@@ -172,15 +194,30 @@ class Level1Monolith(BaseEngine):
         # Increment sequence for this query in the conversation
         self._sequence += 1
 
-        # Compute real conversation history tokens from previous responses
-        history_tokens = self._compute_history_tokens(message_history)
+        # Initialize per-query state
+        self._current_clean_call_tokens = None
+        self._current_user_msg_tokens = None
+        self._current_history_tokens = 0
+        self._first_round_input_tokens = None
+
+        # Count tokens for this query without history (one API call ~150ms)
+        # This gives us the exact cost of: prompt + tools + this message
+        clean_call_tokens = self._count_clean_call_tokens(user_message)
+        self._current_clean_call_tokens = clean_call_tokens
+
+        # Compute user message tokens (includes ~5-7 tokens of message framing)
+        if clean_call_tokens is not None:
+            self._current_user_msg_tokens = (
+                clean_call_tokens - self._init_prompt_tokens - self._init_tool_tokens
+            )
 
         # Start query session with conversation context
+        # Note: We'll update conversation_history_tokens after Round 1 with the real value
         query_id = self.logger.start_query(
             user_message,
             conversation_id=self._conversation_id,
             sequence=self._sequence,
-            conversation_history_tokens=history_tokens,
+            conversation_history_tokens=0,  # Will be updated after Round 1
         )
         self._current_query_id = query_id
 
@@ -213,6 +250,16 @@ class Level1Monolith(BaseEngine):
                         round_input = response.usage.input_tokens
                         round_output = response.usage.output_tokens
 
+                        # After Round 1: compute exact history tokens
+                        if round_num == 1:
+                            self._first_round_input_tokens = round_input
+                            if clean_call_tokens is not None:
+                                if message_history:
+                                    # History = verified_round1 - clean_call (exact)
+                                    self._current_history_tokens = round_input - clean_call_tokens
+                                else:
+                                    self._current_history_tokens = 0
+
                         # Determine response type and extract tool calls
                         tool_calls = [
                             p.tool_name for p in response.parts
@@ -221,9 +268,9 @@ class Level1Monolith(BaseEngine):
                         is_tool_call = len(tool_calls) > 0
                         response_type = "tool_call" if is_tool_call else "text"
 
-                        # Build input breakdown (structural estimates for the suitcase view)
+                        # Build input breakdown with per-query measurements
                         input_breakdown = self._build_input_breakdown(
-                            round_num, message_history, round_input
+                            round_num, message_history, round_input, clean_call_tokens
                         )
 
                         # Get response preview
@@ -248,6 +295,11 @@ class Level1Monolith(BaseEngine):
             # Backfill total_rounds on all API_CALL events now that we know the total
             self.logger.backfill_total_rounds(query_id, round_num)
 
+            # Update session with REAL history tokens (not the broken sum-of-outputs)
+            session = self.logger._active_sessions.get(query_id)
+            if session:
+                session.conversation_history_tokens = self._current_history_tokens
+
             # Get the final result
             result = agent_run.result
 
@@ -259,81 +311,138 @@ class Level1Monolith(BaseEngine):
 
         finally:
             self._current_query_id = None
+            # Clean up per-query state
+            self._current_clean_call_tokens = None
+            self._current_user_msg_tokens = None
+            self._current_history_tokens = None
+            self._first_round_input_tokens = None
             self.logger.end_query(query_id)
 
     def _build_input_breakdown(
-        self, round_number: int, message_history: list, actual_input_tokens: int
+        self, round_number: int, message_history: list, actual_input_tokens: int,
+        clean_call_tokens: int | None = None
     ) -> list[dict]:
-        """Build structural breakdown of what's in this round's input (the suitcase contents).
+        """Build breakdown of what's in this round's input.
 
-        Uses REAL measured token counts for static components.
-        Computes dynamic content as: actual_total - known_static_components.
+        Token sources:
+        - System prompt: MEASURED at startup via count_tokens API
+        - Tool definitions: MEASURED at startup via count_tokens API
+        - User message: COMPUTED from per-query count_tokens - prompt - tools
+        - Conversation history: COMPUTED from round1_verified - clean_call
+        - Tool exchanges (round 2+): COMPUTED from roundN_verified - round1_verified
+        - Verified total: VERIFIED from ModelResponse.usage.input_tokens
+
+        Every number traces to a real measurement. No len//4, no hardcoding.
         """
         breakdown = []
 
-        # Known static components (measured at init)
-        known_static = self._init_prompt_tokens + self._init_tool_tokens + self._init_base_tokens
-
-        # System prompt - MEASURED
+        # System prompt — measured at startup
         breakdown.append({
             "label": f"System prompt ({len(self._init_skills)} skills)",
             "tokens": self._init_prompt_tokens,
             "is_measured": True,
-            "note": "All skills loaded — monolith tax",
+            "source": "count_tokens API at startup",
         })
 
-        # Tool definitions - MEASURED
+        # Tool definitions — measured at startup
+        tool_count = len(self.agent._function_toolset.tools) if hasattr(self.agent, '_function_toolset') else 2
         breakdown.append({
-            "label": "Tool definitions (2 tools)",
+            "label": f"Tool definitions ({tool_count} tools)",
             "tokens": self._init_tool_tokens,
             "is_measured": True,
+            "source": "count_tokens API at startup",
         })
 
-        # Base API overhead - MEASURED
-        breakdown.append({
-            "label": "API framing overhead",
-            "tokens": self._init_base_tokens,
-            "is_measured": True,
-        })
+        if round_number == 1:
+            # ROUND 1: We have clean_call and can split precisely
 
-        # Dynamic content = actual_total - known_static (COMPUTED)
-        dynamic_tokens = actual_input_tokens - known_static
-        if dynamic_tokens < 0:
-            dynamic_tokens = 0  # Shouldn't happen but guard against it
+            if self._current_history_tokens is not None and self._current_history_tokens > 0:
+                # Has conversation history
+                breakdown.append({
+                    "label": "Conversation history",
+                    "tokens": self._current_history_tokens,
+                    "is_computed": True,
+                    "source": "round1_verified - clean_call",
+                    "note": "All prior messages, tool calls, and results re-sent",
+                })
 
-        # Check if there's conversation history from previous queries
-        history_tokens = self._compute_history_tokens(message_history)
+            if self._current_user_msg_tokens is not None:
+                breakdown.append({
+                    "label": "Your question",
+                    "tokens": self._current_user_msg_tokens,
+                    "is_computed": True,
+                    "source": "clean_call - prompt - tools",
+                    "note": "Includes message framing",
+                })
+            else:
+                # count_tokens failed — compute from what we have
+                known = self._init_prompt_tokens + self._init_tool_tokens
+                if self._current_history_tokens is not None:
+                    known += self._current_history_tokens
+                remainder = actual_input_tokens - known
+                breakdown.append({
+                    "label": "Your question + framing",
+                    "tokens": max(remainder, 0),
+                    "is_computed": True,
+                    "source": "total - known components",
+                })
 
-        if round_number == 1 and history_tokens == 0:
-            # First round, no prior conversation: just user's question
-            breakdown.append({
-                "label": "Your question",
-                "tokens": dynamic_tokens,
-                "is_computed": True,
-                "note": f"Computed: {actual_input_tokens} - {known_static} = {dynamic_tokens}",
-            })
-        elif round_number == 1 and history_tokens > 0:
-            # First round with conversation history
-            breakdown.append({
-                "label": "Conversation history + your question",
-                "tokens": dynamic_tokens,
-                "is_computed": True,
-                "note": f"Prior queries re-sent. Computed: {actual_input_tokens} - {known_static}",
-            })
+            # Include clean_call_tokens for verification (Round 1 only)
+            if clean_call_tokens is not None:
+                breakdown.append({
+                    "label": "Clean call (verification)",
+                    "tokens": clean_call_tokens,
+                    "is_metadata": True,
+                    "source": "count_tokens(prompt + tools + this_message)",
+                })
+
         else:
-            # Subsequent rounds: user message + tool call history
-            breakdown.append({
-                "label": f"Your question + tool exchanges (rounds 1-{round_number - 1})",
-                "tokens": dynamic_tokens,
-                "is_computed": True,
-                "note": f"Computed: {actual_input_tokens} - {known_static} = {dynamic_tokens}",
-            })
+            # ROUND 2+: Everything since round 1 is tool exchange growth
 
-        # Verification: sum should equal actual
+            if self._first_round_input_tokens:
+                growth = actual_input_tokens - self._first_round_input_tokens
+
+                # Carry forward the round 1 dynamic content split
+                if self._current_history_tokens is not None and self._current_history_tokens > 0:
+                    breakdown.append({
+                        "label": "Conversation history",
+                        "tokens": self._current_history_tokens,
+                        "is_computed": True,
+                        "source": "round1_verified - clean_call",
+                    })
+
+                if self._current_user_msg_tokens is not None:
+                    breakdown.append({
+                        "label": "Your question",
+                        "tokens": self._current_user_msg_tokens,
+                        "is_computed": True,
+                        "source": "clean_call - prompt - tools",
+                    })
+
+                breakdown.append({
+                    "label": f"Tool exchanges (rounds 1-{round_number - 1})",
+                    "tokens": growth,
+                    "is_computed": True,
+                    "source": f"round{round_number}_verified - round1_verified",
+                    "note": "Tool calls sent + results received",
+                })
+            else:
+                # Fallback: lump everything dynamic
+                known = self._init_prompt_tokens + self._init_tool_tokens
+                remainder = actual_input_tokens - known
+                breakdown.append({
+                    "label": "Your question + history + tool exchanges",
+                    "tokens": max(remainder, 0),
+                    "is_computed": True,
+                    "source": "total - static components",
+                })
+
+        # Verified total — always last
         breakdown.append({
-            "label": "ACTUAL TOTAL (from API)",
+            "label": "TOTAL",
             "tokens": actual_input_tokens,
             "is_real": True,
+            "source": "ModelResponse.usage.input_tokens",
         })
 
         return breakdown

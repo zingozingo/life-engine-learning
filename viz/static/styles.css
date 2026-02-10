@@ -904,10 +904,23 @@ body {
     text-align: right;
 }
 
+/* Token value styling by measurement type */
+.suitcase-item .item-tokens.token-est,
 .suitcase-item .item-tokens.est {
     color: var(--text-muted);
 }
 
+.suitcase-item .item-tokens.token-measured {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.suitcase-item .item-tokens.token-computed {
+    color: var(--accent-blue);
+    font-weight: 500;
+}
+
+.suitcase-item .item-tokens.token-real,
 .suitcase-item .item-tokens.real {
     color: var(--accent-green);
     font-weight: 600;
@@ -919,6 +932,20 @@ body {
     color: var(--text-muted);
     font-style: italic;
     padding-left: 0;
+}
+
+.suitcase-item .item-note-dim {
+    opacity: 0.6;
+    font-size: 0.75em;
+}
+
+/* Row styling by measurement type */
+.suitcase-measured {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.suitcase-computed {
+    background: rgba(52, 152, 219, 0.05);
 }
 
 .suitcase-actual-total {

@@ -10,6 +10,7 @@ Every query pays the token cost for ALL skill instructions.
 
 import time
 
+from anthropic import Anthropic
 from pydantic_ai import Agent
 from pydantic_ai._agent_graph import CallToolsNode, End
 from pydantic_ai.messages import ModelResponse
@@ -29,26 +30,31 @@ class Level1Monolith(BaseEngine):
         """Initialize the monolith engine with all skills loaded."""
         super().__init__()  # Initialize base engine state
         self.logger = EventLogger(level=1)
+        self._client = Anthropic()  # For token counting API
+        self._model = "claude-sonnet-4-5-20250929"
 
         # Build the giant system prompt with all skills
         self.system_prompt = build_monolith_prompt()
         self.skills = load_all_skills()
 
-        # Estimate token count (rough: ~4 chars per token)
-        prompt_tokens = len(self.system_prompt) // 4
-
         # Create the agent with the monolith prompt
         self.agent = Agent(
-            "anthropic:claude-sonnet-4-5-20250929",
+            f"anthropic:{self._model}",
             system_prompt=self.system_prompt,
         )
 
         # Register tools on the agent
         self._register_tools()
 
-        # Log that we composed the prompt (once at init)
-        # We'll create a dummy query_id for initialization logging
-        self._init_prompt_tokens = prompt_tokens
+        # Measure REAL token counts for static components (one-time API calls)
+        self._prompt_tokens = self._count_real_prompt_tokens()
+        self._tool_tokens = self._count_real_tool_tokens()
+        self._base_tokens = self._count_real_base_tokens()
+
+        # Store for logging
+        self._init_prompt_tokens = self._prompt_tokens
+        self._init_tool_tokens = self._tool_tokens
+        self._init_base_tokens = self._base_tokens
         self._init_skills = list(self.skills.keys())
 
     def _register_tools(self):
@@ -102,6 +108,54 @@ class Level1Monolith(BaseEngine):
 
             return result
 
+    def _get_tool_definitions(self) -> list[dict]:
+        """Extract tool definitions in Anthropic API format from the agent."""
+        tool_defs = []
+        for name, tool in self.agent._function_toolset.tools.items():
+            tool_defs.append({
+                "name": tool.name,
+                "description": tool.description or "",
+                "input_schema": tool.function_schema.json_schema,
+            })
+        return tool_defs
+
+    def _count_real_prompt_tokens(self) -> int:
+        """Count exact tokens for system prompt using Anthropic API."""
+        result = self._client.messages.count_tokens(
+            model=self._model,
+            system=self.system_prompt,
+            messages=[{"role": "user", "content": "x"}],  # Minimal message
+        )
+        # Subtract 1 for the "x" message
+        return result.input_tokens - 1
+
+    def _count_real_tool_tokens(self) -> int:
+        """Count exact tokens for tool definitions using Anthropic API."""
+        tool_defs = self._get_tool_definitions()
+        result = self._client.messages.count_tokens(
+            model=self._model,
+            system="",  # Empty system prompt
+            messages=[{"role": "user", "content": "x"}],
+            tools=tool_defs,
+        )
+        # Subtract 1 for "x" and the base overhead
+        base = self._client.messages.count_tokens(
+            model=self._model,
+            system="",
+            messages=[{"role": "user", "content": "x"}],
+        )
+        return result.input_tokens - base.input_tokens
+
+    def _count_real_base_tokens(self) -> int:
+        """Count base overhead tokens (API framing) using Anthropic API."""
+        result = self._client.messages.count_tokens(
+            model=self._model,
+            system="",
+            messages=[{"role": "user", "content": "x"}],
+        )
+        # This includes 1 token for "x" plus base overhead
+        return result.input_tokens - 1
+
     async def run(self, user_message: str, message_history: list) -> tuple[str, list]:
         """Process a user message and return a response.
 
@@ -132,14 +186,17 @@ class Level1Monolith(BaseEngine):
 
         try:
             # Log composition events (what will be packed into the suitcase)
+            # These use REAL measured token counts from init
             self.logger.log_prompt_composed(
                 query_id,
                 self.system_prompt,
-                self._init_prompt_tokens,  # Structural estimate for display
+                self._init_prompt_tokens,  # Real measured count
                 self._init_skills,
             )
-            self.logger.log_tool_registered(query_id, "http_fetch", token_count=20)
-            self.logger.log_tool_registered(query_id, "mock_api_fetch", token_count=30)
+            # Log tool tokens as a combined count (API counts them together)
+            self.logger.log_tool_registered(
+                query_id, "http_fetch + mock_api_fetch", token_count=self._init_tool_tokens
+            )
 
             # Run with per-round instrumentation using agent.iter()
             round_num = 0
@@ -209,47 +266,70 @@ class Level1Monolith(BaseEngine):
     ) -> list[dict]:
         """Build structural breakdown of what's in this round's input (the suitcase contents).
 
-        These are estimates for understanding — the actual_input_tokens from the API is the truth.
+        Uses REAL measured token counts for static components.
+        Computes dynamic content as: actual_total - known_static_components.
         """
         breakdown = []
 
-        # System prompt is always included
+        # Known static components (measured at init)
+        known_static = self._init_prompt_tokens + self._init_tool_tokens + self._init_base_tokens
+
+        # System prompt - MEASURED
         breakdown.append({
             "label": f"System prompt ({len(self._init_skills)} skills)",
-            "tokens_est": self._init_prompt_tokens,
+            "tokens": self._init_prompt_tokens,
+            "is_measured": True,
             "note": "All skills loaded — monolith tax",
         })
 
-        # Tool definitions always included
+        # Tool definitions - MEASURED
         breakdown.append({
             "label": "Tool definitions (2 tools)",
-            "tokens_est": 50,
+            "tokens": self._init_tool_tokens,
+            "is_measured": True,
         })
 
-        # Conversation history from previous queries
-        if message_history:
-            history_est = self._compute_history_tokens(message_history)
-            breakdown.append({
-                "label": "Conversation history (prior queries)",
-                "tokens_est": history_est,
-                "note": "Re-sent every round",
-            })
-
-        # User message (rough estimate)
+        # Base API overhead - MEASURED
         breakdown.append({
-            "label": "User message",
-            "tokens_est": 30,
+            "label": "API framing overhead",
+            "tokens": self._init_base_tokens,
+            "is_measured": True,
         })
 
-        # For round 2+, previous rounds' tool calls and results accumulate
-        if round_number > 1:
+        # Dynamic content = actual_total - known_static (COMPUTED)
+        dynamic_tokens = actual_input_tokens - known_static
+        if dynamic_tokens < 0:
+            dynamic_tokens = 0  # Shouldn't happen but guard against it
+
+        # Check if there's conversation history from previous queries
+        history_tokens = self._compute_history_tokens(message_history)
+
+        if round_number == 1 and history_tokens == 0:
+            # First round, no prior conversation: just user's question
             breakdown.append({
-                "label": f"Tool calls + results (rounds 1-{round_number - 1})",
-                "tokens_est": None,  # Hard to estimate precisely
-                "note": "Previous tool interactions re-sent",
+                "label": "Your question",
+                "tokens": dynamic_tokens,
+                "is_computed": True,
+                "note": f"Computed: {actual_input_tokens} - {known_static} = {dynamic_tokens}",
+            })
+        elif round_number == 1 and history_tokens > 0:
+            # First round with conversation history
+            breakdown.append({
+                "label": "Conversation history + your question",
+                "tokens": dynamic_tokens,
+                "is_computed": True,
+                "note": f"Prior queries re-sent. Computed: {actual_input_tokens} - {known_static}",
+            })
+        else:
+            # Subsequent rounds: user message + tool call history
+            breakdown.append({
+                "label": f"Your question + tool exchanges (rounds 1-{round_number - 1})",
+                "tokens": dynamic_tokens,
+                "is_computed": True,
+                "note": f"Computed: {actual_input_tokens} - {known_static} = {dynamic_tokens}",
             })
 
-        # Always include the real total as ground truth
+        # Verification: sum should equal actual
         breakdown.append({
             "label": "ACTUAL TOTAL (from API)",
             "tokens": actual_input_tokens,

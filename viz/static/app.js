@@ -577,22 +577,42 @@ function renderAPICallData(event) {
     html += `<span class="suitcase-total">${inputTokens.toLocaleString()} tokens</span>`;
     html += `</div>`;
 
-    // Breakdown items
+    // Breakdown items - now with measured/computed/real flags
     html += `<div class="suitcase-contents">`;
     for (const item of breakdown) {
+        // Get token value - new format uses "tokens", old format uses "tokens_est"
+        const tokenVal = item.tokens ?? item.tokens_est;
+
         if (item.is_real) {
-            // This is the "ACTUAL TOTAL" line — render as the verified total
+            // ACTUAL TOTAL line — the verified sum from API
             html += `<div class="suitcase-item suitcase-actual-total">`;
             html += `<span class="item-label">${escapeHtml(item.label)}</span>`;
-            html += `<span class="item-tokens real">${item.tokens.toLocaleString()}</span>`;
+            html += `<span class="item-tokens token-real">${tokenVal.toLocaleString()}</span>`;
+            html += `</div>`;
+        } else if (item.is_measured) {
+            // MEASURED via count_tokens API — exact value
+            html += `<div class="suitcase-item suitcase-measured">`;
+            html += `<span class="item-label">${escapeHtml(item.label)}</span>`;
+            html += `<span class="item-tokens token-measured">${tokenVal.toLocaleString()}</span>`;
+            if (item.note) {
+                html += `<span class="item-note">${escapeHtml(item.note)}</span>`;
+            }
+            html += `</div>`;
+        } else if (item.is_computed) {
+            // COMPUTED = total - known (exact, derived from real values)
+            html += `<div class="suitcase-item suitcase-computed">`;
+            html += `<span class="item-label">${escapeHtml(item.label)}</span>`;
+            html += `<span class="item-tokens token-computed">${tokenVal.toLocaleString()}</span>`;
+            if (item.note) {
+                html += `<span class="item-note item-note-dim">${escapeHtml(item.note)}</span>`;
+            }
             html += `</div>`;
         } else {
-            const tokStr = item.tokens_est != null
-                ? `~${item.tokens_est.toLocaleString()}`
-                : '';
+            // Legacy format: estimated (~) tokens
+            const tokStr = tokenVal != null ? `~${tokenVal.toLocaleString()}` : '';
             html += `<div class="suitcase-item">`;
             html += `<span class="item-label">${escapeHtml(item.label)}</span>`;
-            html += `<span class="item-tokens est">${tokStr}</span>`;
+            html += `<span class="item-tokens token-est">${tokStr}</span>`;
             if (item.note) {
                 html += `<span class="item-note">${escapeHtml(item.note)}</span>`;
             }
@@ -771,6 +791,7 @@ function groupEventsIntoSteps(events) {
         const promptEvent = prepEvents.find(e => e.event_type === 'prompt_composed');
         const toolRegs = prepEvents.filter(e => e.event_type === 'tool_registered');
         const skillLoads = prepEvents.filter(e => e.event_type === 'skill_loaded');
+        const firstApiCall = apiCalls[0] || null;  // Pass first API call for user msg tokens
 
         steps.push({
             type: 'preparation',
@@ -779,6 +800,7 @@ function groupEventsIntoSteps(events) {
             promptEvent,
             toolRegs,
             skillLoads,
+            firstApiCall,
         });
     }
 
@@ -871,6 +893,21 @@ function renderPreparationStep(step, session) {
     const historyTokens = session?.conversation_history_tokens || 0;
     const isFirstQuery = (session?.sequence || 1) === 1;
 
+    // Extract user message tokens from first API call breakdown
+    let userMsgTokens = null;
+    const firstApiCall = step.firstApiCall;
+    if (firstApiCall && firstApiCall.data?.input_breakdown) {
+        // Find the computed "User message" or similar entry
+        const questionItem = firstApiCall.data.input_breakdown.find(item =>
+            item.is_computed && item.label &&
+            (item.label.toLowerCase().includes('user message') ||
+             item.label.toLowerCase().includes('your question'))
+        );
+        if (questionItem && questionItem.tokens != null) {
+            userMsgTokens = questionItem.tokens;
+        }
+    }
+
     let html = '<div class="narrative-step preparation-step">';
     html += `<div class="step-header">`;
     html += `<span class="step-number">STEP ${step.stepNumber}</span>`;
@@ -921,6 +958,9 @@ function renderPreparationStep(step, session) {
     html += `<div class="pack-detail">`;
     html += `<span class="pack-label">Your question</span>`;
     html += `<span class="pack-desc">"${escapeHtml((session?.query_text || '').substring(0, 80))}${(session?.query_text?.length || 0) > 80 ? '...' : ''}"</span>`;
+    if (userMsgTokens != null) {
+        html += `<span class="pack-tokens">${userMsgTokens.toLocaleString()} tokens</span>`;
+    }
     html += `</div>`;
     html += `</div>`;
 
@@ -1025,16 +1065,28 @@ function renderApiCallStep(step) {
         html += `<summary>View suitcase contents breakdown</summary>`;
         html += `<div class="suitcase-contents">`;
         for (const item of breakdown) {
+            const tokenVal = item.tokens ?? item.tokens_est;
+
             if (item.is_real) {
                 html += `<div class="suitcase-item suitcase-actual-total">`;
-                html += `<span class="item-label">✓ Verified total from API</span>`;
-                html += `<span class="item-tokens real">${item.tokens.toLocaleString()}</span>`;
+                html += `<span class="item-label">Verified total from API</span>`;
+                html += `<span class="item-tokens token-real">${tokenVal.toLocaleString()}</span>`;
+                html += `</div>`;
+            } else if (item.is_measured) {
+                html += `<div class="suitcase-item suitcase-measured">`;
+                html += `<span class="item-label">${escapeHtml(item.label)}</span>`;
+                html += `<span class="item-tokens token-measured">${tokenVal.toLocaleString()}</span>`;
+                html += `</div>`;
+            } else if (item.is_computed) {
+                html += `<div class="suitcase-item suitcase-computed">`;
+                html += `<span class="item-label">${escapeHtml(item.label)}</span>`;
+                html += `<span class="item-tokens token-computed">${tokenVal.toLocaleString()}</span>`;
                 html += `</div>`;
             } else {
-                const tokStr = item.tokens_est != null ? `~${item.tokens_est.toLocaleString()}` : '—';
+                const tokStr = tokenVal != null ? `~${tokenVal.toLocaleString()}` : '—';
                 html += `<div class="suitcase-item">`;
                 html += `<span class="item-label">${escapeHtml(item.label)}</span>`;
-                html += `<span class="item-tokens est">${tokStr}</span>`;
+                html += `<span class="item-tokens token-est">${tokStr}</span>`;
                 html += `</div>`;
             }
         }

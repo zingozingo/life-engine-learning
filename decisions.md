@@ -212,3 +212,69 @@ Format: Date, decision title, and brief explanation of the choice and rationale.
 **Verification**: Weather query now shows 3 rounds (4,355 → 4,558 → 5,027 input tokens) with visible accumulation as tool results add to context.
 
 **Impact**: Dashboard can now show per-round breakdowns, input accumulation, and real API costs. Old logs remain readable via backward compatibility.
+
+---
+
+## 2026-02-09: Real Token Counting via count_tokens API
+
+**Decision**: Replace all `len(text) // 4` token estimates with exact measurements from Anthropic's `client.messages.count_tokens()` API.
+
+**Context**: Token estimates were significantly wrong. System prompt estimated at 3,051 tokens was actually 3,687 (17% under). Tool definitions estimated at 50 tokens were actually 658 (92% under, 13x error!).
+
+**Solution**:
+- At engine init, call `count_tokens()` to measure static components once:
+  - `_count_real_prompt_tokens()` — system prompt alone
+  - `_count_real_tool_tokens()` — tool definitions alone (extracted via `agent._function_toolset.tools`)
+  - `_count_real_base_tokens()` — API framing overhead
+- In `_build_input_breakdown()`, use arithmetic: `dynamic = actual_total - known_static`
+- Each breakdown item now has one of three flags:
+  - `is_measured: true` — exact count from count_tokens API
+  - `is_computed: true` — derived as total minus known static
+  - `is_real: true` — the actual API total (verification)
+
+**Measured Values**:
+- System prompt (7 skills): 3,687 tokens
+- Tool definitions (2 tools): 658 tokens
+- API framing overhead: 7 tokens
+- **Total static**: 4,352 tokens per API call
+
+**Impact**:
+- engines/level1_monolith.py: Anthropic client, counting methods, new breakdown format
+- viz/static/app.js: Handle is_measured/is_computed/is_real flags, new CSS classes
+- viz/static/styles.css: token-measured, token-computed, token-real styling
+- Backward compatible: legacy sessions with tokens_est still render correctly
+
+---
+
+## 2026-02-09: User Message Token Display in Preparation Step
+
+**Decision**: Show user message token count in the narrative Preparation step, extracted from the first API call's breakdown.
+
+**Context**: The Preparation step listed skills, tools, and conversation history with token counts, but "Your question" showed no count. The data was available in the API call breakdown but not displayed.
+
+**Solution**:
+- In `groupEventsIntoSteps()`, pass `firstApiCall` reference to the preparation step
+- In `renderPreparationStep()`, extract user message tokens from the breakdown by finding the `is_computed` entry labeled "Your question" or similar
+- Display the token count next to the question preview
+
+**Breakdown Label Updates** (for consistency):
+- Round 1 with no history: "Your question"
+- Round 1 with history: "Conversation history + your question"
+- Round 2+: "Your question + tool exchanges (rounds 1-N)"
+
+**Verification Script**: Created `verify_tokens.py` to validate token math across all sessions:
+- For each query, for each API round, verifies breakdown items sum to verified total
+- Checks session aggregate totals match sum of round totals
+- Reports PASS/FAIL per round with detailed breakdown
+
+**Test Results**: 4 queries, 6 total API rounds, all PASS:
+- Simple query (no tools): 1 round, 4,353 tokens
+- Query with history (no tools): 1 round, 4,494 tokens
+- Weather API query: 3 rounds (4,613 → 4,804 → 5,272)
+- Follow-up with accumulated history: 1 round, 5,436 tokens
+
+**Conversation Grouping Verification** (added to verify_tokens.py):
+- Checks all sessions in a chat share one conversation_id
+- Validates sequence numbers are sequential (1, 2, 3, 4)
+- Confirms history_tokens=0 for seq=1, >0 for seq>1
+- Detects broken grouping when conversation_id == query_id

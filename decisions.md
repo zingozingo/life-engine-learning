@@ -314,3 +314,63 @@ Format: Date, decision title, and brief explanation of the choice and rationale.
 **Rationale**: Unlike "context window" or "prompt," "suitcase" implies physical weight, repacking, and the cost of carrying everything. It drives both architecture decisions (what data to log in the breakdown) and visualization (how to display input composition). Level comparisons become "lighter suitcases" vs "heavier suitcases."
 
 **Impact**: All dashboard copy uses suitcase language. Breakdown sections labeled "View suitcase contents breakdown." The analogy extends to all levels: Level 2 packs fewer skills (lighter suitcase), Level 3 routes to avoid unnecessary packing, Level 5 distributes the load across multiple smaller suitcases.
+
+---
+
+## 2026-02-10: API_CALL Event Type (Combined Request+Response)
+
+**Decision**: New API_CALL event type where one event = one complete API round-trip, carrying real input_tokens, output_tokens, input_breakdown[], response_type, tool_calls[], response_preview.
+
+**Context**: Old model logged separate LLM_REQUEST and LLM_RESPONSE events but tool queries have 2-3 round-trips. The natural unit of cost is one complete send+receive cycle.
+
+**Rationale**: One suitcase = one event = one visual card. Simpler data model, maps directly to suitcase mental model.
+
+**Impact**: New EventType value. Old types kept for backward compat. Dashboard handles both formats. input_breakdown array enables detailed visualization of what's packed in each call.
+
+---
+
+## 2026-02-10: Per-Query count_tokens for History/Question Split
+
+**Decision**: Add one count_tokens API call per query (~150ms) measuring prompt + tools + just this message (no history). Enables exact split: user_msg = clean_call - prompt - tools, history = round1_verified - clean_call.
+
+**Context**: Without this, "Your question" and "Conversation history" were lumped in one bucket. The logged conversation_history_tokens was wrong — only summed output_tokens, missing user messages and tool exchanges (540 logged vs 1,147 actual, a 53% undercount).
+
+**Rationale**: Diagnostic proved clean_call matches actual Round 1 exactly for seq=1 queries (0 difference). History computation uses two real numbers. Cost is one API call per query, not per round.
+
+**Impact**: Exact history tracking enables accurate conversation growth visualization. Fixes the broken history_tokens field. Preparation step now shows separate "Conversation history" and "Your question" items with exact token counts.
+
+---
+
+## 2026-02-10: Combined Tool Growth from Verified Round Deltas
+
+**Decision**: Replace per-tool result token estimates (len//4) with combined growth computed from consecutive verified API round totals: growth = roundN+1_input - roundN_input.
+
+**Context**: The last remaining len//4 in the system. Tool result estimates showed ~15 tokens when actual growth was 253 (17x undercount). Per-tool splitting impossible without additional API calls when multiple tools run between rounds.
+
+**Rationale**: When 2+ tools run between rounds, we can't split per-tool without more API calls. Combined total from two verified numbers is exact and honest. Better to show "These 2 tool calls added 531 tokens" (accurate) than "~7 tokens" + "~8 tokens" (wrong).
+
+**Impact**: Eliminates the last estimate in the system. Dashboard shows combined growth on tool execution steps. groupEventsIntoSteps() links tool steps with adjacent API calls to compute realGrowthTokens.
+
+---
+
+## 2026-02-10: API Framing Overhead as Measured Constant
+
+**Decision**: Measure framing overhead at startup: framing = count_tokens(empty_prompt + "x") - 1. Typically ~7 tokens for message structure encoding by the API.
+
+**Context**: Even with measured prompt and tools, sum didn't match base total. The gap was API encoding overhead — the token cost of message structure itself.
+
+**Rationale**: Constant per session (property of message structure, not content). Closes breakdown math gap. Without this, breakdown items wouldn't sum to verified total.
+
+**Impact**: Enables the guarantee that breakdown items sum to verified total exactly. Stored as self._base_tokens on engine instance.
+
+---
+
+## 2026-02-10: No Emojis in Dashboard — CSS Indicators Only
+
+**Decision**: Remove all emojis from dashboard UI. Use CSS left-border color coding for visual distinction: purple for skills, teal for tools, blue for history, green for question.
+
+**Context**: Dashboard is an educational engineering tool, not a chat interface. Emojis (📚🔧💬📜📦) were used initially for visual scannability but felt unprofessional.
+
+**Rationale**: Professional aesthetic. Emojis render inconsistently across platforms. CSS is reliable and maintainable. Color coding provides visual hierarchy without character rendering issues.
+
+**Impact**: Clean, consistent visual language. pack-item-skills, pack-item-tools, pack-item-history, pack-item-question CSS classes. Color coding can extend to Level 2+ step types.

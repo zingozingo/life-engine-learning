@@ -55,7 +55,7 @@ A Travel Concierge AI assistant built five different ways, from monolith to full
   "query_id": "uuid",
   "level": 1,
   "timestamp": "ISO-8601",
-  "event_type": "prompt_composed | classifier_decision | skill_loaded | tool_registered | proactive_fetch | tool_called | llm_response | error",
+  "event_type": "prompt_composed | classifier_decision | skill_loaded | tool_registered | proactive_fetch | tool_called | api_call | error",
   "decision_by": "code | llm | human",
   "data": {
     "token_count": 0,
@@ -64,6 +64,8 @@ A Travel Concierge AI assistant built five different ways, from monolith to full
   }
 }
 ```
+
+> **Note**: `api_call` replaces the deprecated `llm_request`/`llm_response` pair. One api_call event = one complete API round-trip with real token counts from the response.
 
 ---
 

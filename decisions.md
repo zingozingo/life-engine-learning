@@ -278,3 +278,39 @@ Format: Date, decision title, and brief explanation of the choice and rationale.
 - Validates sequence numbers are sequential (1, 2, 3, 4)
 - Confirms history_tokens=0 for seq=1, >0 for seq>1
 - Detects broken grouping when conversation_id == query_id
+
+---
+
+## 2026-02-09: Three-Tier Token Accuracy Model
+
+**Decision**: Every token number in the system must fall into exactly one of three categories: MEASURED (from count_tokens API, exact for static components), COMPUTED (derived by subtracting measured values from verified totals, exact by arithmetic), or VERIFIED (real input_tokens/output_tokens from Claude API response). No len//4 estimates. No hardcoded values. No guessing.
+
+**Context**: The session began with all numbers estimated via character counting. Each fix revealed deeper problems. The only acceptable standard for an educational system about token costs is that every number traces to a real measurement.
+
+**Rationale**: Measured gives exact values for things that don't change (prompt, tools). Verified gives exact totals per round (from API). Computed fills the gap via subtraction: dynamic_content = verified_total - measured_static. The sum of measured + computed always equals verified exactly, by construction.
+
+**Impact**: Dashboard visually distinguishes tiers via is_measured/is_computed/is_real flags. Breakdown items always sum to the verified total. Known limitation: the dynamic bucket (user message + conversation history) can't be further split without an additional per-query API call (~150ms). Within that bucket, ~1-9 tokens may shift between sub-components due to tokenizer interaction effects, but the total is always exact.
+
+---
+
+## 2026-02-09: Narrative Timeline Replaces Flat Event List
+
+**Decision**: Group raw events into narrative STEPs with explanatory prose: Preparation ("Your code packed a suitcase") → Sent to Claude (per round, with input growth explanation) → Your code ran the tool (with parameters and results) → Total Cost (with percentage insights). Progressive disclosure via expandable "View suitcase contents breakdown."
+
+**Context**: The flat event timeline (prompt_composed → tool_registered → api_call → tool_called) showed accurate data but didn't teach. Users could see numbers but couldn't follow the story of what happened and why. The dashboard's purpose is education, not just monitoring.
+
+**Rationale**: "Claude received the suitcase (4,564 tokens), read everything, and decided it needs more data" teaches more than "api_call: input_tokens=4564, output_tokens=90". Composition events merge into one Preparation step. Each API round gets context about what changed since the last round. Tool executions make clear that code, not Claude, runs tools.
+
+**Impact**: New rendering pipeline in app.js: groupEventsIntoSteps() → renderNarrativeStep(). Legacy renderTimeline() preserved for old log files without API_CALL events. Each step type has its own renderer. Future levels will add new step types (e.g., classifier_decision for Level 3, routing_choice for Level 4).
+
+---
+
+## 2026-02-09: Suitcase Mental Model as Canonical API Call Analogy
+
+**Decision**: "Packing a suitcase" is the canonical mental model for understanding what happens in each API call. Every call packs everything (system prompt, tool definitions, user message, conversation history, previous tool call/result pairs) into one payload. Rounds 2+ repack everything from before PLUS new tool results — the suitcase gets heavier.
+
+**Context**: The project creator couldn't intuitively understand why input tokens grew between rounds or why the system prompt cost was paid multiple times per query. The suitcase analogy made it click immediately and maps perfectly to the technical reality.
+
+**Rationale**: Unlike "context window" or "prompt," "suitcase" implies physical weight, repacking, and the cost of carrying everything. It drives both architecture decisions (what data to log in the breakdown) and visualization (how to display input composition). Level comparisons become "lighter suitcases" vs "heavier suitcases."
+
+**Impact**: All dashboard copy uses suitcase language. Breakdown sections labeled "View suitcase contents breakdown." The analogy extends to all levels: Level 2 packs fewer skills (lighter suitcase), Level 3 routes to avoid unnecessary packing, Level 5 distributes the load across multiple smaller suitcases.

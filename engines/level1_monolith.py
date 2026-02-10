@@ -224,10 +224,14 @@ class Level1Monolith(BaseEngine):
                 self._init_prompt_tokens,  # Real measured count
                 self._init_skills,
             )
-            # Log tool tokens as a combined count (API counts them together)
-            self.logger.log_tool_registered(
-                query_id, "http_fetch + mock_api_fetch", token_count=self._init_tool_tokens
-            )
+            # Log each tool separately (tokens split evenly since API measures combined)
+            tool_names = list(self.agent._function_toolset.tools.keys())
+            tokens_per_tool = self._init_tool_tokens // len(tool_names)
+            remainder = self._init_tool_tokens % len(tool_names)
+            for i, tool_name in enumerate(tool_names):
+                # Last tool absorbs rounding remainder
+                tool_tokens = tokens_per_tool + (remainder if i == len(tool_names) - 1 else 0)
+                self.logger.log_tool_registered(query_id, tool_name, token_count=tool_tokens)
 
             # Run with per-round instrumentation using agent.iter()
             round_num = 0

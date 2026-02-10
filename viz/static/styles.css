@@ -1391,6 +1391,26 @@ body {
     margin-top: 6px;
 }
 
+/* Combined tool growth summary - shows REAL token growth from consecutive API rounds */
+.tool-growth-summary {
+    margin-top: 12px;
+    padding: 8px 12px;
+    background: rgba(255, 159, 67, 0.06);
+    border-left: 3px solid var(--accent-orange);
+    border-radius: 0 4px 4px 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.tool-growth-summary strong {
+    color: var(--accent-orange);
+    font-weight: 600;
+}
+
+.tool-growth-summary .growth-icon {
+    margin-right: 4px;
+}
+
 /* Total cost step */
 .total-cost-step {
     border-color: var(--accent-green);

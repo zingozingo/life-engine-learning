@@ -872,7 +872,40 @@ function groupEventsIntoSteps(events) {
         totalTokens: totalInput + totalOutput,
     });
 
+    // Second pass: Link tool execution steps with adjacent API calls for real growth computation
+    for (let i = 0; i < steps.length; i++) {
+        if (steps[i].type === 'tool_execution') {
+            const prevApiStep = findPreviousStepOfType(steps, i, 'api_call');
+            const nextApiStep = findNextStepOfType(steps, i, 'api_call');
+
+            if (prevApiStep && nextApiStep) {
+                const prevInput = prevApiStep.event?.data?.input_tokens || 0;
+                const nextInput = nextApiStep.event?.data?.input_tokens || 0;
+                steps[i].realGrowthTokens = nextInput - prevInput;
+                steps[i].prevRoundInput = prevInput;
+                steps[i].nextRoundInput = nextInput;
+            }
+            // If no next API call, realGrowthTokens stays undefined (last tool before final response)
+        }
+    }
+
     return steps;
+}
+
+// Helper: find previous step of a given type
+function findPreviousStepOfType(steps, fromIndex, type) {
+    for (let i = fromIndex - 1; i >= 0; i--) {
+        if (steps[i].type === type) return steps[i];
+    }
+    return null;
+}
+
+// Helper: find next step of a given type
+function findNextStepOfType(steps, fromIndex, type) {
+    for (let i = fromIndex + 1; i < steps.length; i++) {
+        if (steps[i].type === type) return steps[i];
+    }
+    return null;
 }
 
 // Dispatch to step-specific renderer
@@ -1119,22 +1152,22 @@ function renderApiCallStep(step) {
 // STEP: Tool Execution - your code ran the tool
 function renderToolExecutionStep(step) {
     const events = step.events || [];
+    const toolCount = events.length;
 
     let html = '<div class="narrative-step tool-step">';
     html += `<div class="step-header">`;
     html += `<span class="step-number">STEP ${step.stepNumber}</span>`;
-    html += `<span class="step-title">Your code ran the tool</span>`;
+    html += `<span class="step-title">Your code ran the tool${toolCount > 1 ? 's' : ''}</span>`;
     html += `</div>`;
 
     html += `<div class="step-explanation">`;
-    html += `<p>Claude can't fetch data itself — it asks your code to do it. Your code executed the tool and got results back.</p>`;
+    html += `<p>Claude can't fetch data itself — it asks your code to do it. Your code executed the tool${toolCount > 1 ? 's' : ''} and got results back.</p>`;
 
     for (const toolEvent of events) {
         const td = toolEvent.data || {};
         const name = td.tool_name || 'unknown';
         const params = td.parameters || {};
         const result = td.result_summary || '';
-        const resultTokens = td.result_tokens;
         const dur = toolEvent.duration_ms;
 
         html += `<div class="tool-exec-card">`;
@@ -1158,14 +1191,22 @@ function renderToolExecutionStep(step) {
             html += `</div>`;
         }
 
-        // Token impact
-        if (resultTokens) {
-            html += `<div class="tool-token-impact">`;
-            html += `This result adds ~${resultTokens.toLocaleString()} tokens to the next suitcase.`;
-            html += `</div>`;
-        }
+        // Note: Per-tool token estimates removed - real growth shown at step level below
 
         html += `</div>`; // tool-exec-card
+    }
+
+    // Combined growth summary using REAL data from adjacent API rounds
+    // Only show if there's a next API call to compare against
+    if (step.realGrowthTokens != null && step.realGrowthTokens > 0) {
+        html += `<div class="tool-growth-summary">`;
+        html += `<span class="growth-icon">📦</span> `;
+        if (toolCount === 1) {
+            html += `This tool call added <strong>${step.realGrowthTokens.toLocaleString()} tokens</strong> to the next suitcase.`;
+        } else {
+            html += `These ${toolCount} tool calls added <strong>${step.realGrowthTokens.toLocaleString()} tokens</strong> to the next suitcase.`;
+        }
+        html += `</div>`;
     }
 
     html += `</div>`; // step-explanation

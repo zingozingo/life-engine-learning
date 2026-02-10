@@ -67,10 +67,8 @@ class Level1Monolith(BaseEngine):
             result = await _http_fetch(url)
             duration_ms = int((time.time() - start) * 1000)
 
-            # Estimate how many tokens this result adds to the next round's input
-            result_tokens = len(result) // 4
-
             # Log the tool call if we have an active query
+            # Note: result_tokens omitted - real growth computed from consecutive API rounds
             if hasattr(self, "_current_query_id") and self._current_query_id:
                 self.logger.log_tool_called(
                     self._current_query_id,
@@ -79,7 +77,6 @@ class Level1Monolith(BaseEngine):
                     result[:200] if len(result) > 200 else result,
                     DecisionBy.LLM,
                     duration_ms,
-                    result_tokens=result_tokens,
                 )
 
             return result
@@ -91,10 +88,8 @@ class Level1Monolith(BaseEngine):
             result = _mock_api_fetch(endpoint, params)
             duration_ms = int((time.time() - start) * 1000)
 
-            # Estimate how many tokens this result adds to the next round's input
-            result_tokens = len(result) // 4
-
             # Log the tool call if we have an active query
+            # Note: result_tokens omitted - real growth computed from consecutive API rounds
             if hasattr(self, "_current_query_id") and self._current_query_id:
                 self.logger.log_tool_called(
                     self._current_query_id,
@@ -103,7 +98,6 @@ class Level1Monolith(BaseEngine):
                     result[:200] if len(result) > 200 else result,
                     DecisionBy.LLM,
                     duration_ms,
-                    result_tokens=result_tokens,
                 )
 
             return result

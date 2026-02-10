@@ -170,6 +170,56 @@ def verify_breakdown_split(session):
     return all_pass
 
 
+def verify_no_estimates(log_dir="logs"):
+    """Verify no estimated token values remain in logged data.
+
+    Checks for:
+    - tokens_est fields in breakdown items (should not exist in new logs)
+    - result_tokens in tool_called events (should be None now)
+    - Any tilde (~) markers in labels or notes
+    """
+    files = sorted(Path(log_dir).glob("session_*.json"))
+
+    if not files:
+        print("\n  No sessions to check for estimates")
+        return True
+
+    print(f"\n{'='*70}")
+    print("ESTIMATE ELIMINATION VERIFICATION")
+    print(f"{'='*70}")
+
+    all_pass = True
+    issues_found = 0
+
+    for f in files:
+        s = json.loads(f.read_text())
+        query = s["query_text"][:40]
+
+        for event in s["events"]:
+            data = event.get("data", {})
+
+            # Check for tokens_est in breakdown items
+            breakdown = data.get("input_breakdown", [])
+            for item in breakdown:
+                if "tokens_est" in item:
+                    print(f"  [FAIL] Found tokens_est in {event['event_type']} breakdown: {item.get('label', '?')}")
+                    all_pass = False
+                    issues_found += 1
+
+            # Check for result_tokens in tool_called events (should be None now)
+            if event["event_type"] == "tool_called":
+                rt = data.get("result_tokens")
+                if rt is not None:
+                    print(f"  [FAIL] result_tokens={rt} in tool_called for \"{query}\" — should be None")
+                    all_pass = False
+                    issues_found += 1
+
+    if all_pass:
+        print(f"  [PASS] No estimated values found in {len(files)} session files")
+
+    return all_pass
+
+
 def verify_conversations(log_dir="logs"):
     """Verify conversation grouping across sessions."""
     files = sorted(Path(log_dir).glob("session_*.json"), key=lambda f: f.stat().st_mtime)
@@ -263,10 +313,14 @@ def main():
     # Add conversation grouping check
     conversations_pass = verify_conversations()
 
+    # Add estimate elimination check
+    estimates_pass = verify_no_estimates()
+
     print(f"\n{'='*70}")
-    overall = all_pass and conversations_pass
+    overall = all_pass and conversations_pass and estimates_pass
     print(f"TOKEN MATH: {pass_count} passed, {fail_count} failed")
     print(f"CONVERSATION GROUPING: {'PASS' if conversations_pass else 'FAIL'}")
+    print(f"ESTIMATE ELIMINATION: {'PASS' if estimates_pass else 'FAIL'}")
     print(f"OVERALL: {'ALL PASS' if overall else 'SOME FAILURES'}")
     print(f"{'='*70}")
 

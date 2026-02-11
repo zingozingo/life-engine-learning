@@ -40,7 +40,7 @@ class BaseEngine(ABC):
 
     @abstractmethod
     def get_level(self) -> int:
-        """Return the engine level number (1-5)."""
+        """Return the engine level number (1-4)."""
         ...
 
     @abstractmethod

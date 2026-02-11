@@ -1,7 +1,11 @@
-# Travel Concierge — Multi-Level Agent Architecture Spec
+> **SUPERSEDED:** This 5-level specification has been replaced by [ARCHITECTURE_SPEC.md](./ARCHITECTURE_SPEC.md) (4 levels + 3 overlays) as of 2026-02-10.
+> This file is preserved for historical reference only.
+
+# Travel Concierge — Multi-Level Agent Architecture Spec (LEGACY)
 
 **Created:** 2025-02-07
 **Project:** Life Engine Learning
+**Status:** Superseded
 
 ---
 

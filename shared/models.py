@@ -1,7 +1,7 @@
 """Pydantic models for events, query sessions, and configuration.
 
 These models are the foundation for event logging and visualization.
-All engines (L1-L5) emit events using these types, and the dashboard reads them.
+All engines (L1-L4) emit events using these types, and the dashboard reads them.
 """
 
 from datetime import datetime, timezone
@@ -41,7 +41,7 @@ class EngineEvent(BaseModel):
     """
 
     query_id: str = Field(description="UUID grouping events for one query")
-    level: int = Field(ge=1, le=5, description="Engine level (1-5)")
+    level: int = Field(ge=1, le=4, description="Engine level (1-4)")
     timestamp: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         description="When this event occurred (UTC)",
@@ -76,7 +76,7 @@ class QuerySession(BaseModel):
     """
 
     query_id: str = Field(description="UUID for this session")
-    level: int = Field(ge=1, le=5, description="Engine level used")
+    level: int = Field(ge=1, le=4, description="Engine level used")
     query_text: str = Field(description="The user's input query")
     started_at: datetime = Field(description="When processing began (UTC)")
     ended_at: datetime | None = Field(

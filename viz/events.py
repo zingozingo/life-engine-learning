@@ -36,7 +36,7 @@ class EventLogger:
         """Initialize the logger for a specific engine level.
 
         Args:
-            level: Engine level (1-5)
+            level: Engine level (1-4)
             log_dir: Directory to write session files
         """
         self.level = level

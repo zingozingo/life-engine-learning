@@ -18,10 +18,9 @@ logfire.instrument_pydantic_ai()
 
 LEVELS = {
     "1": "Level 1: Monolith - Everything hardcoded in one prompt",
-    "2": "Level 2: Skills + Generic Tools - Progressive disclosure",
-    "3": "Level 3: Query Classification - Explicit routing",
-    "4": "Level 4: Adaptive Routing - Proactive/reactive fetching",
-    "5": "Level 5: MCP Tool Servers - Distributed tool infrastructure",
+    "2": "Level 2: Selective Loading - Skills loaded on demand via load_skill",
+    "3": "Level 3: Explicit Routing - Query classification drives selection",
+    "4": "Level 4: Adaptive Context - Proactive fetching and context engineering",
 }
 
 
@@ -93,7 +92,7 @@ def main():
 
     level = sys.argv[1]
     if level not in LEVELS:
-        print(f"Unknown level: {level}. Choose 1-5.")
+        print(f"Unknown level: {level}. Choose 1-4.")
         return
 
     if level == "1":

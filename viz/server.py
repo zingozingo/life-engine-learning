@@ -85,7 +85,7 @@ async def list_levels():
 @app.get("/api/annotations/{level}")
 async def get_level_annotations(level: int):
     """Get annotations for a specific level."""
-    if level < 1 or level > 5:
+    if level < 1 or level > 4:
         raise HTTPException(status_code=404, detail=f"Level {level} not found")
     return get_annotations(level)
 

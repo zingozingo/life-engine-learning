@@ -374,3 +374,25 @@ Format: Date, decision title, and brief explanation of the choice and rationale.
 **Rationale**: Professional aesthetic. Emojis render inconsistently across platforms. CSS is reliable and maintainable. Color coding provides visual hierarchy without character rendering issues.
 
 **Impact**: Clean, consistent visual language. pack-item-skills, pack-item-tools, pack-item-history, pack-item-question CSS classes. Color coding can extend to Level 2+ step types.
+
+---
+
+## 2026-02-10: Migration from 5-Level to 4+3 Model
+
+**Decision**: Restructure architecture from 5 discrete levels to 4 core levels + 3 orthogonal overlays.
+
+**Context**: The original 5-level model (Monolith → Skills → Classifier → Adaptive → MCP) treated MCP as a separate "level" when it's really an infrastructure choice orthogonal to the routing/loading strategy. Additionally, capabilities like execution orchestration, context persistence, and human-in-the-loop cut across all levels.
+
+**New Model**:
+- **4 Levels**: Monolith, Selective Loading, Explicit Routing, Adaptive Context
+- **3 Overlays**: Execution Orchestration, Context Persistence, Human-in-the-Loop
+
+**Rationale**: Overlays are capabilities that can be enabled on any level. MCP becomes an implementation detail of tool execution, not a level. This creates a cleaner conceptual model: levels define HOW queries are processed, overlays define WHAT additional capabilities are available.
+
+**Impact**:
+- `engines/level5_mcp.py` deleted
+- `shared/models.py` level constraint changed from `le=5` to `le=4`
+- `viz/server.py` validation updated
+- `main.py` LEVELS dict reduced to 4 entries
+- New spec: `docs/ARCHITECTURE_SPEC.md` supersedes `docs/SPEC.md`
+- Teaching layer (annotations, dashboard) to be updated in Phase 3

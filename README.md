@@ -1,6 +1,6 @@
 # Life Engine Learning
 
-A hands-on learning project for building AI agents with Pydantic AI. Travel Concierge theme with 5 engine levels demonstrating different architectural patterns.
+A hands-on learning project for building AI agents with Pydantic AI. Travel Concierge theme with 4 engine levels + 3 overlays demonstrating different architectural patterns.
 
 ## Prerequisites
 
@@ -41,12 +41,13 @@ make stop             # stop dashboard when done for the day
 
 ## What It Does
 
-Travel Concierge AI built 5 different ways:
+Travel Concierge AI built 4 different ways, with 3 orthogonal overlays:
 - **Level 1**: Monolith — all skills in one giant prompt
-- **Level 2**: Skills + Tools — progressive disclosure (coming soon)
-- **Level 3**: Classifier — explicit routing (coming soon)
-- **Level 4**: Adaptive — proactive data fetching (coming soon)
-- **Level 5**: MCP — distributed tool servers (coming soon)
+- **Level 2**: Selective Loading — skills loaded on demand (coming soon)
+- **Level 3**: Explicit Routing — query classification drives selection (coming soon)
+- **Level 4**: Adaptive Context — proactive fetching and context engineering (coming soon)
+
+Overlays (can be enabled on any level): Execution Orchestration, Context Persistence, Human-in-the-Loop.
 
 Dashboard visualizes what happens at each level so you can compare the tradeoffs.
 
@@ -55,12 +56,12 @@ Dashboard visualizes what happens at each level so you can compare the tradeoffs
 ```
 life-engine-learning/
 ├── main.py              # Entry point: pick engine level
-├── engines/             # Engine implementations (L1-L5)
+├── engines/             # Engine implementations (L1-L4)
 ├── shared/              # Tools, models, skill loader
 ├── skills/              # Travel skills (weather, flights, hotels, etc.)
 ├── viz/                 # Dashboard server + event logger
 ├── logs/                # Session event logs (gitignored)
-├── docs/SPEC.md         # Architecture specification
+├── docs/ARCHITECTURE_SPEC.md  # Architecture specification (4+3 model)
 └── decisions.md         # Architectural decisions log
 ```
 

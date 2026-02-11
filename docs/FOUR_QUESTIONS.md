@@ -71,12 +71,12 @@ For every event in your agent's execution:
 
 ## Level-by-Level Patterns
 
-| Aspect | Level 1 | Level 2 | Level 3 | Level 4 | Level 5 |
-|--------|---------|---------|---------|---------|---------|
-| Routing | LLM (implicit) | LLM (implicit) | Code (explicit) | Code (explicit) | Code (explicit) |
-| Skill Loading | All always | LLM loads on demand | Code loads per route | Code loads per route | Code loads per route |
-| Tool Availability | All always | All always | Scoped per route | Scoped per route | MCP per route |
-| Data Fetching | Reactive only | Reactive only | Reactive only | Proactive + Reactive | Proactive via MCP |
+| Aspect | Level 1: Monolith | Level 2: Skills | Level 3: Classifier | Level 4: Adaptive Context |
+|--------|-------------------|-----------------|---------------------|--------------------------|
+| Routing | LLM (implicit) | LLM (implicit) | Code (explicit) | Code (explicit) |
+| Skill Loading | All always | LLM loads on demand | Code loads per route | Code loads per route |
+| Tool Availability | All always | All always | Scoped per route | Scoped per route |
+| Data Fetching | Reactive only | Reactive only | Reactive only | Proactive + Reactive |
 
 ## Design Principles
 
@@ -88,5 +88,5 @@ For every event in your agent's execution:
 
 ## Further Reading
 
-- See `docs/SPEC.md` for the full Travel Concierge architecture specification
+- See `docs/ARCHITECTURE_SPEC.md` for the full Travel Concierge architecture specification (4+3 model)
 - See `decisions.md` for architectural decisions log

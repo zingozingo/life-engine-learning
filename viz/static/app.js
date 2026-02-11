@@ -1002,11 +1002,13 @@ function renderPreparationStep(step, session) {
 
     html += `</div>`; // pack-list
 
-    // Monolith tax callout
-    html += `<div class="insight-callout">`;
-    html += `<strong>Level 1 monolith tax:</strong> All ${skillCount} skills are loaded into every query, even if only one is needed. `;
-    html += `Level 2 will improve this — loading only relevant skills on demand.`;
-    html += `</div>`;
+    // Insight callout — populated from annotation data when available
+    const prepAnnotation = step.promptEvent?.annotation;
+    if (prepAnnotation && prepAnnotation.level_insight) {
+        html += `<div class="insight-callout">`;
+        html += prepAnnotation.level_insight;
+        html += `</div>`;
+    }
 
     html += `</div>`; // step-explanation
     html += `</div>`; // narrative-step

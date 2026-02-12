@@ -15,11 +15,15 @@ All teaching content comes from:
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from .concepts import LEVEL_CONCEPTS
 from .events import EVENT_TEACHING, FUTURE_EVENTS
 from .insights import get_insight_data
+
+# Matches unfilled {placeholder} or {placeholder:format_spec} patterns
+_UNFILLED_PLACEHOLDER = re.compile(r"\{[a-z_]+(?::[^}]*)?\}")
 
 
 def get_level_info(level: int) -> dict[str, Any] | None:
@@ -65,7 +69,7 @@ def get_annotation_for_event(
             return None
         return None
 
-    # Build the level_insight field
+    # Build the level_insight field from template + session measurements
     level_insight = teaching.level_insight_template
     if session:
         try:
@@ -73,6 +77,10 @@ def get_annotation_for_event(
             level_insight = teaching.level_insight_template.format(**data)
         except (KeyError, ValueError):
             pass  # Keep template as-is if data isn't available
+        # Strip any surviving {placeholder} patterns so raw templates never show
+        level_insight = _UNFILLED_PLACEHOLDER.sub("", level_insight)
+        # Clean up double spaces left by stripped placeholders
+        level_insight = re.sub(r"  +", " ", level_insight).strip()
 
     return {
         # Contract-required fields

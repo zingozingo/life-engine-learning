@@ -124,10 +124,10 @@ async def get_session(query_id: str, annotated: bool = Query(default=False)):
     result = session.model_dump()
 
     if annotated:
-        # Add annotations to each event
+        # Add annotations to each event, passing session for data-driven insights
         for event in result["events"]:
             event_type = event["event_type"]
-            annotation = get_annotation_for_event(event_type, result["level"])
+            annotation = get_annotation_for_event(event_type, result["level"], session=session)
             event["annotation"] = annotation
 
     return result
@@ -182,7 +182,7 @@ async def get_conversation(conversation_id: str, annotated: bool = Query(default
         if annotated:
             for event in session_data["events"]:
                 event_type = event["event_type"]
-                annotation = get_annotation_for_event(event_type, session_data["level"])
+                annotation = get_annotation_for_event(event_type, session_data["level"], session=session)
                 event["annotation"] = annotation
 
         result.append(session_data)

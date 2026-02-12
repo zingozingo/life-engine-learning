@@ -45,7 +45,15 @@ def get_insight_data(session: QuerySession) -> dict[str, Any]:
 
     Returns dict of {placeholder_name: value} for level_insight_template.
     """
-    data: dict[str, Any] = {}
+    # All template keys get defaults so .format() never raises KeyError
+    data: dict[str, Any] = {
+        "total_input": 0,
+        "total_output": 0,
+        "input_pct": 0,
+        "system_tokens": 0,
+        "tool_tokens": 0,
+        "skill_count": 0,
+    }
 
     # From session totals (VERIFIED — from API response)
     data["total_input"] = session.total_input_tokens
@@ -53,8 +61,6 @@ def get_insight_data(session: QuerySession) -> dict[str, Any]:
     total = session.total_input_tokens + session.total_output_tokens
     if total > 0:
         data["input_pct"] = (session.total_input_tokens / total) * 100
-    else:
-        data["input_pct"] = 0
 
     # From events (MEASURED — from count_tokens API or engine instrumentation)
     system_events = [
@@ -72,7 +78,8 @@ def get_insight_data(session: QuerySession) -> dict[str, Any]:
     skill_events = [
         e for e in session.events if e.event_type == "skill_loaded"
     ]
-    data["skill_count"] = len(skill_events) if skill_events else 0
+    if skill_events:
+        data["skill_count"] = len(skill_events)
 
     return data
 

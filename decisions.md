@@ -396,3 +396,15 @@ Format: Date, decision title, and brief explanation of the choice and rationale.
 - `main.py` LEVELS dict reduced to 4 entries
 - New spec: `docs/ARCHITECTURE_SPEC.md` supersedes `docs/SPEC.md`
 - Teaching layer (annotations, dashboard) to be updated in Phase 3
+
+---
+
+## 2026-02-11: Template Fill Wiring — Server Passes Session Data to Teaching Layer
+
+**Decision**: `viz/server.py` now passes the session object to `get_annotation_for_event()` at both annotation injection points. `insights.py` pre-initializes all template keys to 0 to prevent KeyError. `__init__.py` has a regex safety net that strips any surviving `{placeholder}` patterns.
+
+**Context**: Templates were rendering as raw `{system_tokens:,} tokens` because server.py didn't pass session data. The teaching layer accepted an optional session parameter but server.py never provided it.
+
+**Rationale**: Three-layer fix — data flows through (server.py), defaults prevent crashes (insights.py), safety net catches edge cases (__init__.py). Belt and suspenders.
+
+**Impact**: Dashboard now shows real measured values in all teaching callouts. No hardcoded numbers, no raw templates.

@@ -89,6 +89,8 @@ How tool calls are managed and executed.
 
 **Can be added to:** Any level (L1-L4)
 
+**Roadmap:** See [docs/AGENTS.md](AGENTS.md) for the seven execution patterns (sequential through supervisor/worker), how they compose with levels, and implementation priority.
+
 ---
 
 ### Overlay B: Context Persistence
@@ -207,6 +209,38 @@ Note: `api_call` = one complete API round-trip with real token counts.
 
 ---
 
+## Project Structure
+
+```
+life-engine-learning/
+├── main.py                    # Entry point: pick engine level
+├── engines/                   # Engine implementations (L1-L4)
+├── shared/                    # Tools, models, skill loader
+├── skills/                    # Travel skills (weather, flights, hotels, etc.)
+│   └── teaching/SKILL.md      # Extension guide for the teaching layer
+├── viz/                       # Dashboard server + event logger
+│   ├── teaching/              # Teaching layer (concept registry, insights, comparisons)
+│   │   ├── models.py          # Pydantic models for teaching data
+│   │   ├── concepts.py        # Level metadata and concept registry
+│   │   ├── events.py          # Per-event teaching content with templates
+│   │   ├── insights.py        # Measurement-driven insight generators
+│   │   ├── comparisons.py     # Cross-level comparison engine
+│   │   └── __init__.py        # Adapter maintaining API contract
+│   ├── annotations.py         # Thin shim re-exporting from teaching/
+│   ├── events.py              # Event logger
+│   ├── server.py              # FastAPI dashboard server
+│   └── static/                # Dashboard frontend (HTML/CSS/JS)
+├── logs/                      # Session event logs (gitignored)
+├── docs/
+│   ├── ARCHITECTURE_SPEC.md   # This file — 4+3 model specification
+│   ├── AGENTS.md              # Execution orchestration roadmap (Overlay A)
+│   ├── FOUR_QUESTIONS.md      # Four Questions annotation framework
+│   └── sessions/              # Per-session development notes
+└── decisions.md               # Architectural decisions log
+```
+
+---
+
 ## Decision Log Reference
 
 - **2026-02-10:** Restructured from 5 levels to 4 levels + 3 overlays.
@@ -214,5 +248,7 @@ Note: `api_call` = one complete API round-trip with real token counts.
 - **2026-02-10:** Added Context Persistence overlay.
 - **2026-02-10:** Reframed L4 as adaptive context engineering.
 - **2026-02-10:** Confirmed Four Questions as cross-cutting annotation framework.
+- **2026-02-11:** Template fill wiring — server passes session data to teaching layer.
+- **2026-02-11:** Execution orchestration roadmap documented (docs/AGENTS.md).
 
 *This is a living document. The core model - 4 levels + 3 overlays - is the stable foundation everything builds on.*

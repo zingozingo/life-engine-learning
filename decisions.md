@@ -408,3 +408,87 @@ Format: Date, decision title, and brief explanation of the choice and rationale.
 **Rationale**: Three-layer fix — data flows through (server.py), defaults prevent crashes (insights.py), safety net catches edge cases (__init__.py). Belt and suspenders.
 
 **Impact**: Dashboard now shows real measured values in all teaching callouts. No hardcoded numbers, no raw templates.
+
+---
+
+## 2026-02-11: Teaching Layer — Three Components
+
+**Decision**: Concept registry + insight generators + comparison engine replace monolithic annotations.py.
+
+**Context**: annotations.py was 217 lines of hardcoded prose with fake token numbers like "~3,000 tokens". Every new level required rewriting static text.
+
+**Rationale**: Three registries (concepts, insights, comparisons) separate what-to-teach from how-to-measure. Concept registry defines vocabulary. Insight generators produce data-driven narratives. Comparison engine activates only when real data exists for both levels.
+
+**Impact**: viz/teaching/ module created (6 files, ~550 lines). Old annotations.py replaced by shim (see #28).
+
+---
+
+## 2026-02-11: Shim Pattern for Backward Compatibility
+
+**Decision**: annotations.py becomes a 25-line re-export adapter preserving the 9-field annotation contract.
+
+**Context**: server.py and app.js both depend on the annotation API shape. Replacing the teaching internals shouldn't require touching the serving or rendering layers.
+
+**Rationale**: Preserve the interface, replace the implementation. The 9-field contract (title, what, why, q1-q4, decision_by, level_insight, teaches) is now documented and enforced. This is the same principle the architecture teaches about API design.
+
+**Impact**: viz/annotations.py reduced from 217 lines to 25. server.py and app.js unchanged. Dashboard contract preserved exactly.
+
+---
+
+## 2026-02-11: Template Placeholders, Not Hardcoded Numbers
+
+**Decision**: All teaching text uses {placeholder} syntax (e.g., {system_tokens:,}) filled from real session data at render time. Zero literal token counts in teaching prose.
+
+**Context**: Old annotations had lines like "Your system prompt is ~3,000 tokens" which was wrong (actual: 3,687) and would be wrong differently for every configuration.
+
+**Rationale**: If a number could be measured, it must be measured. Templates are the mechanism that enforces this — a placeholder that doesn't get filled is visibly broken, while a hardcoded number that's wrong looks fine.
+
+**Impact**: viz/teaching/events.py uses {system_tokens:,}, {total_input:,}, {input_pct} etc. __init__.py fills from session data. Regex safety net strips unfilled placeholders.
+
+---
+
+## 2026-02-11: Decorator Registry for Insights
+
+**Decision**: @insight(level=1, concept="monolith_tax") auto-registers generator functions. No framework changes needed to add new insights.
+
+**Context**: Needed an extensibility pattern where adding teaching content for L2 doesn't require modifying framework code.
+
+**Rationale**: Same pattern as Agent Skills — metadata declares what something is and when to use it, the framework discovers and orchestrates automatically. When L2 is built, its insights ship with its engine code.
+
+**Impact**: viz/teaching/insights.py has INSIGHT_REGISTRY dict populated by decorator. Three L1 generators registered: monolith_tax, input_dominance, suitcase_growth.
+
+---
+
+## 2026-02-11: Comparisons Activate on Real Data Only
+
+**Decision**: @comparison(1, 2) registered functions run ONLY when both levels have real session data. No stubs, no fakes, no placeholder comparisons.
+
+**Context**: The comparison engine could generate fake "Level 2 would save X tokens" text, but that violates the core principle that every number traces to a measurement.
+
+**Rationale**: The comparison engine sitting dormant, waiting for L2 data to appear, is the right design. It creates a natural reward loop — building the next level immediately unlocks new comparative insights.
+
+**Impact**: viz/teaching/comparisons.py has COMPARISON_REGISTRY. monolith_vs_skills comparison registered for (1,2). Three more stubbed for future level pairs.
+
+---
+
+## 2026-02-11: Teaching Extensibility as a Skill
+
+**Decision**: Created skills/teaching/SKILL.md as a guide for Claude Code to extend the teaching layer for new levels and overlays.
+
+**Context**: The teaching layer's registries need to grow as new engines are built. A human or AI extending the system needs to know which files to modify and what patterns to follow.
+
+**Rationale**: The skill file tells Claude Code exactly how to add concepts, event teachings, insights, and comparisons. It's the same progressive disclosure pattern the project teaches — load instructions only when needed.
+
+**Impact**: skills/teaching/SKILL.md created. Future Claude Code sessions load this when extending teaching content.
+
+---
+
+## 2026-02-11: Phase 4 Absorbed into Phase 3b
+
+**Decision**: UI updates (removing Level 5 option, updating Level 4 name, wiring dynamic annotations) done alongside teaching layer implementation rather than as a separate phase.
+
+**Context**: Original migration plan had 5 phases. Phase 4 (UI updates) was small enough to fold into Phase 3 (teaching layer).
+
+**Rationale**: The migration was effectively 2 phases: Phase 1 (structural changes to code) and Phase 2 (teaching layer + UI). Artificial phase boundaries add overhead without value when the work is naturally coupled.
+
+**Impact**: Migration complete in fewer phases. viz/static/index.html and viz/static/app.js updated in same commit as teaching layer.

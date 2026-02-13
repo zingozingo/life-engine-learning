@@ -4,6 +4,8 @@ These tools are registered on agents and can be called by the LLM.
 """
 
 import json
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -231,3 +233,30 @@ def mock_api_fetch(endpoint: str, params: dict) -> str:
             "error": f"Unknown endpoint: {endpoint}",
             "available_endpoints": ["flights", "hotels", "activities", "currency", "visa"]
         })
+
+
+def get_current_datetime(timezone: str = "UTC") -> str:
+    """Get current date, time, and timezone information.
+
+    Args:
+        timezone: IANA timezone identifier (e.g., 'UTC', 'America/New_York', 'Asia/Tokyo')
+
+    Returns:
+        Formatted JSON string with current date, time, day of week, and timezone info
+    """
+    try:
+        tz = ZoneInfo(timezone)
+    except (KeyError, Exception):
+        return json.dumps({
+            "error": f"Unknown timezone: {timezone}. Use IANA timezone identifiers like 'UTC', 'America/New_York', 'Asia/Tokyo'."
+        })
+
+    now = datetime.now(tz)
+    return json.dumps({
+        "date": now.strftime("%Y-%m-%d"),
+        "time": now.strftime("%H:%M"),
+        "day_of_week": now.strftime("%A"),
+        "timezone": timezone,
+        "utc_offset": now.strftime("%z"),
+        "iso": now.isoformat(),
+    })

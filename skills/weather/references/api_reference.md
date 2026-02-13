@@ -73,3 +73,16 @@
 | 81 | Moderate rain showers |
 | 82 | Violent rain showers |
 | 95 | Thunderstorm |
+
+## Response Format
+
+Always format weather responses with:
+- **Location**: City name and country
+- **Current Temperature**: In Celsius (from `current.temperature_2m`)
+- **Conditions**: Human-readable from weather code
+- **High/Low**: From `daily.temperature_2m_max` and `daily.temperature_2m_min`
+- **Wind Speed**: In km/h from `current.windspeed_10m`
+
+Example: "Tokyo, Japan: Currently 22°C and clear. Today's high 25°C, low 18°C. Wind: 12 km/h."
+
+Note: All temperatures from the API are in Celsius.

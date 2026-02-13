@@ -88,6 +88,7 @@ def build_monolith_prompt(skills_dir: str = "skills") -> str:
         "You have access to the following tools:",
         "- `http_fetch(url)`: Fetch data from any URL (used for weather API)",
         "- `mock_api_fetch(endpoint, params)`: Query travel data APIs (flights, hotels, etc.)",
+        "- `get_current_datetime(timezone)`: Get current date, time, and day of week",
         "",
         "Below are detailed instructions for each skill you can perform.",
         "",
@@ -145,3 +146,78 @@ def _extract_body(content: str) -> str:
         return content
 
     return parts[2].strip()
+
+
+def build_skill_menu(skills_dir: str = "skills") -> str:
+    """Build the Level 2 skill menu with summaries only.
+
+    Returns a formatted string listing all skills with name and description,
+    preceded by instructions on how to load skill details.
+
+    Args:
+        skills_dir: Path to the skills directory
+
+    Returns:
+        Formatted skill menu for the L2 system prompt
+    """
+    skills = load_all_skills(skills_dir)
+
+    lines = [
+        "You have access to the following skills. To learn more about a skill "
+        "before using it, call load_skill(skill_name). To see what reference "
+        "files a skill has, call list_skill_files(skill_name).",
+        "",
+    ]
+    for skill_name in sorted(skills.keys()):
+        meta = skills[skill_name]
+        lines.append(f"- **{meta.name}**: {meta.description}")
+
+    return "\n".join(lines)
+
+
+def list_skill_files(skills_dir: str, skill_name: str) -> list[str]:
+    """List reference files available for a skill.
+
+    Args:
+        skills_dir: Path to the skills directory
+        skill_name: Name of the skill (directory name)
+
+    Returns:
+        List of relative file paths (excluding SKILL.md), or empty list
+        if skill has no reference files or doesn't exist
+    """
+    skill_path = Path(skills_dir) / skill_name
+    if not skill_path.is_dir():
+        return []
+
+    files = []
+    for f in sorted(skill_path.rglob("*")):
+        if f.is_file() and f.name != "SKILL.md":
+            files.append(str(f.relative_to(skill_path)))
+    return files
+
+
+def read_skill_file(skills_dir: str, skill_name: str, file_path: str) -> str:
+    """Read a specific file from within a skill directory.
+
+    Args:
+        skills_dir: Path to the skills directory
+        skill_name: Name of the skill (directory name)
+        file_path: Relative path within the skill directory
+
+    Returns:
+        File contents, or error message if not found or invalid path
+    """
+    skill_path = Path(skills_dir) / skill_name
+    if not skill_path.is_dir():
+        return f"Error: Skill '{skill_name}' not found."
+
+    # Security: prevent directory traversal
+    target = (skill_path / file_path).resolve()
+    if not str(target).startswith(str(skill_path.resolve())):
+        return f"Error: Invalid file path '{file_path}'."
+
+    if not target.is_file():
+        return f"Error: File '{file_path}' not found in skill '{skill_name}'."
+
+    return target.read_text()

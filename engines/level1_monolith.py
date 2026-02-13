@@ -20,6 +20,7 @@ from shared.models import DecisionBy
 from shared.skill_loader import build_monolith_prompt, load_all_skills
 from shared.tools import http_fetch as _http_fetch
 from shared.tools import mock_api_fetch as _mock_api_fetch
+from shared.tools import get_current_datetime as _get_current_datetime
 from viz.events import EventLogger
 
 
@@ -95,6 +96,25 @@ class Level1Monolith(BaseEngine):
                     self._current_query_id,
                     "mock_api_fetch",
                     {"endpoint": endpoint, "params": params},
+                    result[:200] if len(result) > 200 else result,
+                    DecisionBy.LLM,
+                    duration_ms,
+                )
+
+            return result
+
+        @self.agent.tool
+        async def get_current_datetime(ctx, timezone: str = "UTC") -> str:
+            """Get current date, time, and day of week for any timezone."""
+            start = time.time()
+            result = _get_current_datetime(timezone)
+            duration_ms = int((time.time() - start) * 1000)
+
+            if hasattr(self, "_current_query_id") and self._current_query_id:
+                self.logger.log_tool_called(
+                    self._current_query_id,
+                    "get_current_datetime",
+                    {"timezone": timezone},
                     result[:200] if len(result) > 200 else result,
                     DecisionBy.LLM,
                     duration_ms,

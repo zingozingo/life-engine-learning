@@ -85,6 +85,57 @@ async def run_level_1():
             print(f"\nError: {e}\n")
 
 
+async def run_level_2():
+    """Run the Level 2 Skills engine."""
+    from engines.level2_skills import Level2SkillsEngine
+
+    print("\nTravel Concierge - Level 2: Skills + Progressive Disclosure")
+    print("=" * 50)
+    print("LLM sees skill summaries, loads details on demand.")
+    print("Type 'quit' to exit, 'prompt' to see the system prompt.\n")
+
+    engine = Level2SkillsEngine()
+    message_history = []
+
+    # Start a conversation that groups all queries in this chat session
+    conversation_id = engine.logger.start_conversation()
+    engine.set_conversation_id(conversation_id)
+
+    # Show prompt size for demonstration
+    prompt_len = len(engine.get_system_prompt())
+    print(f"System prompt: {prompt_len:,} characters (~{prompt_len // 4:,} tokens)")
+    print(f"Skills available: {', '.join(sorted(engine.skills.keys()))}\n")
+
+    while True:
+        try:
+            user_input = input("You: ").strip()
+        except (KeyboardInterrupt, EOFError):
+            print("\nGoodbye!")
+            break
+
+        if not user_input:
+            continue
+
+        if user_input.lower() == "quit":
+            print("Goodbye!")
+            break
+
+        if user_input.lower() == "prompt":
+            print("\n" + "=" * 50)
+            print("SYSTEM PROMPT:")
+            print("=" * 50)
+            print(engine.get_system_prompt())
+            print("=" * 50 + "\n")
+            continue
+
+        # Run the engine
+        try:
+            response, message_history = await engine.run(user_input, message_history)
+            print(f"\nAssistant: {response}\n")
+        except Exception as e:
+            print(f"\nError: {e}\n")
+
+
 def main():
     if len(sys.argv) < 2:
         show_menu()
@@ -97,6 +148,8 @@ def main():
 
     if level == "1":
         asyncio.run(run_level_1())
+    elif level == "2":
+        asyncio.run(run_level_2())
     else:
         print(f"\n{LEVELS[level]}")
         print("Not yet implemented. Coming soon!")

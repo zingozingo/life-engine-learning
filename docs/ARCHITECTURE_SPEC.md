@@ -30,17 +30,18 @@ Everything hardcoded in one prompt. All skills, all tools, every query.
 ---
 
 ### Level 2: Selective Loading
-Skills loaded on demand via `load_skill` tool.
+Skills loaded on demand via 3-level progressive disclosure.
 
 **Characteristics:**
-- System prompt contains skill summaries only (~200 tokens)
-- LLM calls `load_skill(skill_name)` to get full instructions
-- Tools still all registered (no scoping yet)
-- LLM decides which skills to load (implicit routing)
+- System prompt contains skill menu (summaries only, ~479 tokens vs L1's ~4,106)
+- 3-level disclosure: metadata (always present) → SKILL.md body (load_skill) → references/ (read_skill_file)
+- 6 tools: load_skill, list_skill_files, read_skill_file + http_fetch, mock_api_fetch, get_current_datetime
+- LLM decides which skills to load and to what depth (implicit routing)
+- 88% prompt token reduction vs L1
 
-**Teaching Focus:** Progressive disclosure pattern, skill abstraction.
+**Teaching Focus:** Progressive disclosure pattern, skill abstraction, Agent Skills spec.
 
-**Status:** Stub only.
+**Status:** Complete and instrumented.
 
 ---
 
@@ -132,27 +133,32 @@ These appear as contextual annotations in the dashboard, not as separate section
 
 ---
 
-## Skills (Unchanged)
+## Skills
 
-| Skill | Description | Tools It Uses |
-|-------|-------------|---------------|
-| `weather` | Forecasts, conditions, packing weather advice | `http_fetch` (Open-Meteo) |
-| `flights` | Flight search, price comparison | `mock_api_fetch` |
-| `hotels` | Accommodation search, ratings | `mock_api_fetch` |
-| `activities` | Attractions, tours, restaurants | `mock_api_fetch` |
-| `currency` | Exchange rates, conversion | `mock_api_fetch` |
-| `visa` | Visa requirements, entry rules | `mock_api_fetch` |
-| `packing` | Packing lists | None (LLM reasoning) |
+| Skill | Description | Tools It Uses | Has references/ |
+|-------|-------------|---------------|-----------------|
+| `weather` | Forecasts, conditions, packing weather advice | `http_fetch` (Open-Meteo) | Yes (api_reference.md) |
+| `flights` | Flight search, price comparison | `mock_api_fetch` | No |
+| `hotels` | Accommodation search, ratings | `mock_api_fetch` | No |
+| `activities` | Attractions, tours, restaurants | `mock_api_fetch` | Yes (category_guide.md) |
+| `currency` | Exchange rates, conversion | `mock_api_fetch` | No |
+| `visa` | Visa requirements, entry rules | `mock_api_fetch` | Yes (response_guide.md) |
+| `packing` | Packing lists | None (LLM reasoning) | No |
+| `time` | Current date, time, timezone info | `get_current_datetime` | No |
+| `teaching` | Teaching layer extension guide | None (reference) | No |
 
 ---
 
-## Generic Tools (Unchanged)
+## Generic Tools
 
 | Tool | Description | Levels |
 |------|-------------|--------|
 | `http_fetch` | GET/POST to any URL | All |
 | `mock_api_fetch` | Query mock travel APIs | All |
-| `load_skill` | Load skill instructions | L2 only |
+| `get_current_datetime` | Current date/time via Python stdlib | All |
+| `load_skill` | Load SKILL.md body (disclosure level 2) | L2+ |
+| `list_skill_files` | List reference files in skill directory | L2+ |
+| `read_skill_file` | Read a reference file (disclosure level 3) | L2+ |
 
 ---
 

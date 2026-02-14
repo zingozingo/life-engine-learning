@@ -22,7 +22,7 @@ make install
 ```bash
 make                  # show all commands
 make chat             # start Level 1 chatbot
-make chat level=2     # start Level 2 (coming soon)
+make chat level=2     # start Level 2 chatbot
 make dashboard        # start dashboard server on port 8000
 make start            # dashboard + chat together, opens browser
 make stop             # stop dashboard
@@ -43,7 +43,7 @@ make stop             # stop dashboard when done for the day
 
 Travel Concierge AI built 4 different ways, with 3 orthogonal overlays:
 - **Level 1**: Monolith — all skills in one giant prompt
-- **Level 2**: Selective Loading — skills loaded on demand (coming soon)
+- **Level 2**: Selective Loading — skills loaded on demand via 3-level progressive disclosure
 - **Level 3**: Explicit Routing — query classification drives selection (coming soon)
 - **Level 4**: Adaptive Context — proactive fetching and context engineering (coming soon)
 

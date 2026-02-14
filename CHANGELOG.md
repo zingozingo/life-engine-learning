@@ -1,5 +1,26 @@
 # Changelog
 
+## [Unreleased] - 2026-02-13
+
+### Added
+- Level 2 Skills Engine (engines/level2_skills.py) — 577 lines, 6 tools, progressive disclosure
+- Three-level progressive disclosure: metadata → SKILL.md body → references/ files
+- Time/date skill with native get_current_datetime() tool (Python stdlib, no external deps)
+- Skill discovery tools: load_skill, list_skill_files, read_skill_file
+- Reference files for 3 skills: weather/references/api_reference.md, visa/references/response_guide.md, activities/references/category_guide.md
+- build_skill_menu(), list_skill_files(), read_skill_file() in shared/skill_loader.py
+- run_level_2() in main.py with `make chat level=2` support
+- Decisions #34-#39 documenting L2 architectural choices
+
+### Changed
+- L2 system prompt: 479 tokens vs L1's 4,106 (88% reduction)
+- L1 engine now registers get_current_datetime as third tool
+- SKILL_LOADED events carry disclosure_level (2 or 3) in data dict
+- concepts.py L2 implemented flag flipped to True
+- ARCHITECTURE_SPEC.md updated with L2 implementation details, expanded skills/tools tables
+
+---
+
 ## [Unreleased] - 2026-02-11
 
 ### Added

@@ -54,7 +54,7 @@ LEVEL_CONCEPTS: dict[int, LevelConcept] = {
         one_liner="Progressive disclosure. The LLM manages its own context.",
         who_curates="The LLM — reads skill menu, decides what to load",
         description="Skills broken into summaries (always present) and details (loaded on demand). Generic tools replace endpoint-specific functions.",
-        implemented=False,
+        implemented=True,
         teaches=[
             Concept(
                 id="progressive_disclosure",

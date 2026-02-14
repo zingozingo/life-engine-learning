@@ -492,3 +492,75 @@ Format: Date, decision title, and brief explanation of the choice and rationale.
 **Rationale**: The migration was effectively 2 phases: Phase 1 (structural changes to code) and Phase 2 (teaching layer + UI). Artificial phase boundaries add overhead without value when the work is naturally coupled.
 
 **Impact**: Migration complete in fewer phases. viz/static/index.html and viz/static/app.js updated in same commit as teaching layer.
+
+---
+
+## 2026-02-13: Three-Level Progressive Disclosure Following Agent Skills Standard
+
+**Decision**: Skill structure uses 3 levels: metadata in system prompt (~100 tokens/skill), SKILL.md body loaded on-demand via load_skill tool, references/ files loaded on-demand via read_skill_file tool. Plus list_skill_files utility tool for discovery.
+
+**Context**: Initial L2 design proposed only 2 levels (metadata + body). Research into coleam00/custom-agent-with-skills and the Agent Skills open standard (agentskills.io) revealed the 3-level pattern is the established approach, with references/, scripts/, and assets/ directories for deeper resources.
+
+**Rationale**: 3 levels create measurable variation in token costs. A simple weather query might only need Level 2. A complex trip planning query needs Level 2 + Level 3 across multiple skills. This variation is what makes the teaching layer interesting — it can show real differences in disclosure depth per query.
+
+**Impact**: Skill directories restructured (weather, visa, activities have references/). skill_loader.py gains build_skill_menu(), list_skill_files(), read_skill_file(). L2 engine registers 6 tools total.
+
+---
+
+## 2026-02-13: Reuse SKILL_LOADED Event with disclosure_level Data Field
+
+**Decision**: Instead of creating a new SKILL_RESOURCE_LOADED event type, reuse the existing SKILL_LOADED event with data.disclosure_level=2 for SKILL.md loads and data.disclosure_level=3 for reference file loads.
+
+**Context**: Needed to distinguish Level 2 from Level 3 loads in the event timeline and teaching layer. Options were: new event type (requires touching models.py, events.py, teaching entries, dashboard rendering) or richer data field on existing event.
+
+**Rationale**: It's the same conceptual action — the agent requesting context at different depths. A data field is more future-proof (disclosure_level: 4 for scripts someday?) and requires zero changes to the event pipeline, dashboard, or annotation shim.
+
+**Impact**: SKILL_LOADED events carry disclosure_level and file_path in their data dict. Teaching layer can differentiate via data fields. No new EventType values needed.
+
+---
+
+## 2026-02-13: Selective Level 3 Resources — Variation Is Educational
+
+**Decision**: Only 3 of 9 skills get references/ directories (weather, visa, activities). The rest (flights, hotels, currency, packing, time, teaching) stay flat with SKILL.md only.
+
+**Context**: Could have given every skill a references/ directory for consistency, but most skills are simple enough that splitting would be artificial.
+
+**Rationale**: The variation across skills IS the educational content. Weather has a 2-step API with detailed parameters worth separating. Currency is a single endpoint where everything fits in SKILL.md. The teaching layer can highlight why some skills have deeper resources and what that costs (or saves) in tokens.
+
+**Impact**: Skills directory has mixed structure. list_skill_files returns [] for flat skills, actual paths for deep skills. Token cost varies per query depending on which skills are loaded and to what depth.
+
+---
+
+## 2026-02-13: Time/Date Skill with Native Python Tool
+
+**Decision**: Added a time/date skill using get_current_datetime() — a pure Python function using stdlib datetime and zoneinfo (no network calls, no mock data). Returns JSON with date, time, day_of_week, timezone, utc_offset, iso.
+
+**Context**: Travel queries often reference relative dates ("find a flight for tomorrow"). LLMs have no inherent awareness of current time — they need a tool to check, just as Claude's system prompt has the date injected. Also creates a third tool implementation category for educational variety.
+
+**Rationale**: Three tool types across skills: native Python (time), real HTTP (weather via http_fetch), mock API (flights/hotels/etc via mock_api_fetch). Each has different latency, cost, and complexity characteristics. Registered on both L1 and L2 to maintain L1 as the complete baseline.
+
+**Impact**: 9 skills total (was 8). shared/tools.py gains get_current_datetime(). L1 engine registers it as a third tool. L2 has it alongside the 3 skill discovery tools.
+
+---
+
+## 2026-02-13: Explicit Duplication Over Premature Abstraction
+
+**Decision**: L2 engine copies L1's run() method structure (token counting, round instrumentation, breakdown building) rather than extracting shared logic into BaseEngine or a mixin.
+
+**Context**: L1 and L2 share ~70% identical code in their run() methods. The temptation to refactor into a shared base was strong.
+
+**Rationale**: We haven't built L3 or L4 yet. Abstracting shared patterns from 2 examples risks guessing wrong about what L3/L4 will need. Better to have 3-4 concrete implementations and THEN extract the actual shared patterns. The duplication is intentional and temporary — it will be refactored when the patterns are clear across 3+ engines.
+
+**Impact**: L2 is 577 lines with deliberate duplication from L1. Refactoring target: after L3 is built, look at what's truly shared across 3 engines and extract.
+
+---
+
+## 2026-02-13: Routing Is Multi-Dimensional — Conceptual Framework
+
+**Decision**: Documented that routing (the core of L3) serves multiple independent dimensions, not just intent classification. Dimensions: by intent (planning/action/lookup), by complexity (single-step vs multi-step decomposition), by risk/cost (model selection, approval gates), by domain (skill set scoping).
+
+**Context**: Live testing L2 with a 3-part ordered task revealed that the LLM completed parts 1-2 but dropped part 3. This wasn't a model quality issue — it was an architectural gap. L2 gives the LLM responsibility for both context selection AND execution orchestration. The LLM is good at the former, unreliable at the latter.
+
+**Rationale**: This reframes L3's purpose beyond "classify query type." L3's code-managed routing must handle: what needs to happen (decomposition), in what order (orchestration), and who does each piece (model/skill/tool selection). This three-question framework applies to any harness, including Sherpa/Romulus.
+
+**Impact**: Shapes L3 design to include task decomposition, not just intent routing. Confirms that execution orchestration belongs in the harness (code), not the model. Model-agnostic by design — the model is a reasoning engine called within each step, not the orchestrator of steps.

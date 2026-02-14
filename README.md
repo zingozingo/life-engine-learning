@@ -58,11 +58,12 @@ life-engine-learning/
 ├── main.py              # Entry point: pick engine level
 ├── engines/             # Engine implementations (L1-L4)
 ├── shared/              # Tools, models, skill loader
-├── skills/              # Travel skills (weather, flights, hotels, etc.)
+├── skills/              # 8 travel skills (weather, flights, hotels, etc.)
 ├── viz/                 # Dashboard server + event logger
+│   └── teaching/        # Teaching layer + EXTENDING.md guide
 ├── logs/                # Session event logs (gitignored)
-├── docs/ARCHITECTURE_SPEC.md  # Architecture specification (4+3 model)
-└── decisions.md         # Architectural decisions log
+├── docs/                # Architecture spec, framework docs
+└── decisions.md         # Architectural decisions log (#1-#39)
 ```
 
 ## Dashboard

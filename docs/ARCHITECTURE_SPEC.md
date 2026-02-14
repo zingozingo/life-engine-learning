@@ -222,8 +222,7 @@ life-engine-learning/
 ├── main.py                    # Entry point: pick engine level
 ├── engines/                   # Engine implementations (L1-L4)
 ├── shared/                    # Tools, models, skill loader
-├── skills/                    # Travel skills (weather, flights, hotels, etc.)
-│   └── teaching/SKILL.md      # Extension guide for the teaching layer
+├── skills/                    # Travel skills (8 skills, no meta-skills)
 ├── viz/                       # Dashboard server + event logger
 │   ├── teaching/              # Teaching layer (concept registry, insights, comparisons)
 │   │   ├── models.py          # Pydantic models for teaching data
@@ -231,7 +230,8 @@ life-engine-learning/
 │   │   ├── events.py          # Per-event teaching content with templates
 │   │   ├── insights.py        # Measurement-driven insight generators
 │   │   ├── comparisons.py     # Cross-level comparison engine
-│   │   └── __init__.py        # Adapter maintaining API contract
+│   │   ├── __init__.py        # Adapter maintaining API contract
+│   │   └── EXTENDING.md       # Guide for adding teaching content for new levels
 │   ├── annotations.py         # Thin shim re-exporting from teaching/
 │   ├── events.py              # Event logger
 │   ├── server.py              # FastAPI dashboard server
@@ -241,7 +241,10 @@ life-engine-learning/
 │   ├── ARCHITECTURE_SPEC.md   # This file — 4+3 model specification
 │   ├── AGENTS.md              # Execution orchestration roadmap (Overlay A)
 │   ├── FOUR_QUESTIONS.md      # Four Questions annotation framework
-│   └── sessions/              # Per-session development notes
+│   └── LEARNING_FRAMEWORK.md  # (planned) How the project teaches AI architecture
+├── archive/                   # Historical files preserved for reference
+│   ├── spec_v1_original.md    # Original 5-level spec (superseded by ARCHITECTURE_SPEC)
+│   └── ...                    # MCP experiments, v1 original code
 └── decisions.md               # Architectural decisions log
 ```
 

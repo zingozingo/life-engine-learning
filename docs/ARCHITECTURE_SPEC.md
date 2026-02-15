@@ -241,7 +241,7 @@ life-engine-learning/
 │   ├── ARCHITECTURE_SPEC.md   # This file — 4+3 model specification
 │   ├── AGENTS.md              # Execution orchestration roadmap (Overlay A)
 │   ├── FOUR_QUESTIONS.md      # Four Questions annotation framework
-│   └── LEARNING_FRAMEWORK.md  # (planned) How the project teaches AI architecture
+│   └── LEARNING_FRAMEWORK.md  # How the project teaches AI architecture
 ├── archive/                   # Historical files preserved for reference
 │   ├── spec_v1_original.md    # Original 5-level spec (superseded by ARCHITECTURE_SPEC)
 │   └── ...                    # MCP experiments, v1 original code
